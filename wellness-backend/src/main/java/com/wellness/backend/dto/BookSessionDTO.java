@@ -1,7 +1,6 @@
 package com.wellness.backend.dto;
 
 import com.wellness.backend.model.TherapySession;
-import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -12,7 +11,6 @@ public class BookSessionDTO {
     private Integer practitionerId;
 
     @NotNull(message = "Session date is required")
-    @FutureOrPresent(message = "Session date must be today or in the future")
     private LocalDate sessionDate;
 
     @NotNull(message = "Start time is required")

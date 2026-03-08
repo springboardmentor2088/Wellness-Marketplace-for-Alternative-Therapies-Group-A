@@ -7,6 +7,7 @@ import Stomp from "stompjs";
 
 let stompClient = null;
 let isConnected = false;
+let isConnecting = false;
 let subscriptions = {};
 
 const API_WS = "http://localhost:8081/ws";
@@ -19,6 +20,13 @@ export const connectWebSocket = (userId, onMessageReceived) => {
       return;
     }
 
+    // Guard: prevent concurrent connection attempts
+    if (isConnecting) {
+      resolve(null);
+      return;
+    }
+
+    isConnecting = true;
     const socket = new SockJS(API_WS);
     stompClient = Stomp.over(socket);
 
@@ -26,6 +34,7 @@ export const connectWebSocket = (userId, onMessageReceived) => {
       {},
       (frame) => {
         console.log("WebSocket connected:", frame);
+        isConnecting = false;
         isConnected = true;
 
         // Subscribe to user-specific notifications
@@ -37,6 +46,7 @@ export const connectWebSocket = (userId, onMessageReceived) => {
       },
       (error) => {
         console.error("WebSocket connection error:", error);
+        isConnecting = false;
         isConnected = false;
         reject(error);
       }
@@ -193,6 +203,7 @@ export const disconnectWebSocket = () => {
     stompClient.disconnect(() => {
       console.log("WebSocket disconnected");
       isConnected = false;
+      isConnecting = false;
       stompClient = null;
     });
   }

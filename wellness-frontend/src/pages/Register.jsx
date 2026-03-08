@@ -1,8 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import toast from "react-hot-toast";
 
-import { registerUser, storeAuthData, getAccessToken, getStoredUser } from "../services/authService";
+import { registerUser } from "../services/authService";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -33,21 +33,13 @@ export default function Register() {
         bio: ""
       };
 
-      // Call backend API using authService
       const result = await registerUser(payload);
-      const data = result.data;
 
-      // Store auth data using centralized helper
-      storeAuthData(data);
+      toast.success(result.data?.message || "Registration successful! Please verify your email.");
 
-      toast.success("Registration successful!");
+      // Redirect to OTP verification page — no JWT issued yet
+      navigate("/verify-email", { state: { email: payload.email } });
 
-      // Navigate based on role
-      if (data.user.role === "PRACTITIONER") {
-        navigate("/practitioner/onboarding");
-      } else {
-        navigate("/user/dashboard");
-      }
     } catch (err) {
       console.error("Registration error:", err);
       const errorMsg = err.response?.data?.message || err.message || "Registration failed";
@@ -70,7 +62,6 @@ export default function Register() {
           Your personalized digital therapy platform.
           Secure. Private. Professional.
         </p>
-
         <div className="mt-10 space-y-3 text-sm opacity-80">
           <p>✔ Secure Authentication</p>
           <p>✔ Role Based Access</p>
@@ -92,86 +83,81 @@ export default function Register() {
           <form className="space-y-5" onSubmit={handleSubmit}>
 
             {error && (
-              <div className="hidden"></div>
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800 text-sm">{error}</p>
+              </div>
             )}
 
             <div>
-              <label className="text-xs font-semibold text-gray-600 tracking-wide">
+              <label htmlFor="fullName" className="text-xs font-semibold text-gray-600 tracking-wide">
                 FULL NAME
               </label>
               <input
+                id="fullName"
+                name="fullName"
                 type="text"
                 placeholder="John Doe"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.fullName
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'focus:ring-[#1f6f66]'
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.fullName ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
                   }`}
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 required
               />
-              {errors.fullName && (
-                <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>
-              )}
+              {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-600 tracking-wide">
+              <label htmlFor="email" className="text-xs font-semibold text-gray-600 tracking-wide">
                 EMAIL
               </label>
               <input
+                id="email"
+                name="email"
                 type="email"
                 placeholder="example@email.com"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.email
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'focus:ring-[#1f6f66]'
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.email ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
                   }`}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
               />
-              {errors.email && (
-                <p className="text-red-500 text-xs mt-1">{errors.email}</p>
-              )}
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-600 tracking-wide">
+              <label htmlFor="phone" className="text-xs font-semibold text-gray-600 tracking-wide">
                 PHONE NUMBER
               </label>
               <input
+                id="phone"
+                name="phone"
                 type="tel"
                 placeholder="+91 9876543210"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.phone
-                    ? 'border-red-500 focus:ring-red-500'
-                    : 'focus:ring-[#1f6f66]'
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.phone ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
                   }`}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 required
               />
-              {errors.phone && (
-                <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
-              )}
+              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
             </div>
+
             <div>
-              <label className="text-xs font-semibold text-gray-600 tracking-wide">
+              <label htmlFor="password" className="text-xs font-semibold text-gray-600 tracking-wide">
                 PASSWORD
               </label>
               <input
+                id="password"
+                name="password"
                 type="password"
-                placeholder="•••••••• (minimum 6 characters)"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.password
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'focus:ring-[#1f6f66]'
+                placeholder="••••••••"
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.password ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
                   }`}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
               />
-              {errors.password && (
-                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
-              )}
+              {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
               {!errors.password && formData.password && formData.password.length > 0 && (
                 <p className="text-gray-500 text-xs mt-1">
                   {formData.password.length < 6
@@ -182,10 +168,12 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-gray-600 tracking-wide">
+              <label htmlFor="role" className="text-xs font-semibold text-gray-600 tracking-wide">
                 SELECT ROLE
               </label>
               <select
+                id="role"
+                name="role"
                 className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
@@ -206,10 +194,7 @@ export default function Register() {
 
           <p className="text-center text-sm mt-8 text-gray-600">
             Already have an account?{" "}
-            <Link
-              to="/login"
-              className="text-[#1f6f66] font-semibold hover:underline"
-            >
+            <Link to="/login" className="text-[#1f6f66] font-semibold hover:underline">
               Login
             </Link>
           </p>

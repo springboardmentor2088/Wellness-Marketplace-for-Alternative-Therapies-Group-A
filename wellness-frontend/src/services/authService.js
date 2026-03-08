@@ -92,12 +92,50 @@ export const resetPassword = async (token, newPassword) => {
   // Returns: { message: "Password has been reset successfully..." }
 };
 
+// ---- Verify Email with OTP ----
+export const verifyEmail = async (email, otp) => {
+  const response = await fetch(`${API_BASE}/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw { response: { data: result } };
+  }
+
+  return result;
+  // Returns: { accessToken, refreshToken, user: { id, name, email, role } }
+};
+
+// ---- Resend OTP ----
+export const resendOtp = async (email) => {
+  const response = await fetch(`${API_BASE}/resend-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw { response: { data: result } };
+  }
+
+  return result;
+  // Returns: { message: "If your email is registered and unverified, a new OTP has been sent." }
+};
+
 // ---- Helper: Store auth data in localStorage ----
 export const storeAuthData = (data) => {
   localStorage.setItem("user", JSON.stringify(data.user));
   localStorage.setItem("accessToken", data.accessToken);
   localStorage.setItem("refreshToken", data.refreshToken);
   localStorage.setItem("userRole", data.user.role);
+  // Notify same-tab listeners (storage event only fires in other tabs)
+  window.dispatchEvent(new Event("authChange"));
 };
 
 // ---- Helper: Clear auth data from localStorage ----
@@ -107,6 +145,7 @@ export const clearAuthData = () => {
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("userRole");
   localStorage.removeItem("adminLoggedIn");
+  window.dispatchEvent(new Event("authLogout"));
 };
 
 // ---- Helper: Get stored access token ----

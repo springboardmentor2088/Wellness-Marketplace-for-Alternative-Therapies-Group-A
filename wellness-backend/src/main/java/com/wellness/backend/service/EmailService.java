@@ -86,6 +86,29 @@ public class EmailService {
         sendHtmlEmail(email, subject, htmlContent);
     }
 
+    // ================= SESSION REMINDER EMAIL =================
+
+    /**
+     * Sends a 30-minute reminder email for an upcoming session.
+     */
+    public void sendSessionReminderEmail(String name, String email, java.time.LocalDateTime sessionTime) {
+        String subject = "Reminder: Upcoming Session in 30 Minutes ⏳";
+        String htmlContent = buildSessionReminderTemplate(name, sessionTime);
+        sendHtmlEmail(email, subject, htmlContent);
+    }
+
+    // ================= OTP VERIFICATION EMAIL =================
+
+    /**
+     * Sends a 6-digit OTP email for email address verification.
+     * The plain OTP is shown in the email but never logged.
+     */
+    public void sendOtpVerificationEmail(String name, String email, String otp) {
+        String subject = "Verify your " + appName + " account — OTP";
+        String htmlContent = buildOtpEmailTemplate(name, otp);
+        sendHtmlEmail(email, subject, htmlContent);
+    }
+
     // ================= CORE SEND METHOD =================
 
     /**
@@ -111,6 +134,55 @@ public class EmailService {
     }
 
     // ================= HTML TEMPLATES =================
+
+    private String buildSessionReminderTemplate(String name, java.time.LocalDateTime sessionTime) {
+        java.time.format.DateTimeFormatter timeFormatter = java.time.format.DateTimeFormatter.ofPattern("hh:mm a");
+        String formattedTime = sessionTime.format(timeFormatter);
+
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                        .header { background: linear-gradient(135deg, #1976D2, #0D47A1); padding: 30px; text-align: center; }
+                        .header h1 { color: #ffffff; margin: 0; font-size: 26px; }
+                        .body { padding: 30px; color: #333333; line-height: 1.7; }
+                        .body h2 { color: #1976D2; }
+                        .details { background: #E3F2FD; padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976D2; }
+                        .details p { margin: 6px 0; font-size: 16px; }
+                        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 13px; color: #888888; }
+                        .footer a { color: #1976D2; text-decoration: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Session Reminder</h1>
+                        </div>
+                        <div class="body">
+                            <h2>Hello, %s! ⏳</h2>
+                            <p>This is a friendly reminder that your upcoming therapy session is starting in <strong>30 minutes</strong>.</p>
+                            <div class="details">
+                                <p><strong>Scheduled Time:</strong> %s</p>
+                            </div>
+                            <p>Please log in to your account and get ready for your session.</p>
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="%s" style="display: inline-block; background: linear-gradient(135deg, #1976D2, #0D47A1); color: #ffffff; padding: 14px 36px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px;">Go to Dashboard →</a>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <p>&copy; 2026 %s. All rights reserved.</p>
+                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                .formatted(name, formattedTime, loginUrl, appName, supportEmail, supportEmail);
+    }
 
     private String buildUserWelcomeTemplate(String name, String email) {
         return """
@@ -297,14 +369,14 @@ public class EmailService {
                         <div class="body">
                             <h2>Hello, %s! 🔐</h2>
                             <p>We received a request to reset your password for your <strong>%s</strong> account.</p>
-                            
+
                             <div class="warning">
                                 <p><strong>⚠️ Important:</strong> This link is <strong>secure</strong> and can only be used once.</p>
                                 <p>If you did not request a password reset, please ignore this email. Your account is safe.</p>
                             </div>
 
                             <p>Click the button below to securely reset your password:</p>
-                            
+
                             <div class="cta">
                                 <a href="%s">Reset Your Password →</a>
                             </div>
@@ -332,5 +404,55 @@ public class EmailService {
                 </html>
                 """
                 .formatted(name, appName, resetLink, resetLink, appName, supportEmail, supportEmail);
+    }
+
+    private String buildOtpEmailTemplate(String name, String otp) {
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                        .header { background: linear-gradient(135deg, #1f6f66, #155e57); padding: 30px; text-align: center; }
+                        .header h1 { color: #ffffff; margin: 0; font-size: 26px; }
+                        .body { padding: 30px; color: #333333; line-height: 1.7; }
+                        .body h2 { color: #1f6f66; }
+                        .otp-box { background: #f0f9f7; border: 2px dashed #1f6f66; border-radius: 10px; text-align: center; padding: 24px; margin: 24px 0; }
+                        .otp-code { font-size: 42px; font-weight: bold; letter-spacing: 10px; color: #1f6f66; font-family: monospace; }
+                        .expiry { background: #fff8e1; padding: 14px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107; text-align: center; }
+                        .expiry p { margin: 0; color: #7a5c00; font-weight: bold; }
+                        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 13px; color: #888888; }
+                        .footer a { color: #1f6f66; text-decoration: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Email Verification</h1>
+                        </div>
+                        <div class="body">
+                            <h2>Hello, %s! 👋</h2>
+                            <p>Thank you for registering on <strong>%s</strong>. Please use the OTP below to verify your email address.</p>
+                            <div class="otp-box">
+                                <p style="margin:0 0 8px 0; color:#555; font-size:14px;">Your One-Time Password</p>
+                                <div class="otp-code">%s</div>
+                            </div>
+                            <div class="expiry">
+                                <p>⏰ This OTP expires in <strong>5 minutes</strong></p>
+                            </div>
+                            <p>If you did not create an account, you can safely ignore this email.</p>
+                            <p><strong>Do not share this OTP with anyone.</strong></p>
+                        </div>
+                        <div class="footer">
+                            <p>&copy; 2026 %s. All rights reserved.</p>
+                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                .formatted(name, appName, otp, appName, supportEmail, supportEmail);
     }
 }

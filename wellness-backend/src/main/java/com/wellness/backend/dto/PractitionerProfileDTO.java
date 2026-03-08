@@ -13,6 +13,7 @@ public class PractitionerProfileDTO {
     private String qualifications;
     private String experience;
     private String bio;
+    private String verificationStatus;
     private LocalDateTime createdAt;
 
     public Integer getId() {
@@ -93,6 +94,14 @@ public class PractitionerProfileDTO {
 
     public void setBio(String bio) {
         this.bio = bio;
+    }
+
+    public String getVerificationStatus() {
+        return verificationStatus;
+    }
+
+    public void setVerificationStatus(String verificationStatus) {
+        this.verificationStatus = verificationStatus;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -23,8 +23,8 @@ public class PractitionerRequestService {
 
     @Autowired
     public PractitionerRequestService(PractitionerRequestRepository requestRepository,
-                                      PractitionerProfileRepository practitionerRepository,
-                                      UserRepository userRepository) {
+            PractitionerProfileRepository practitionerRepository,
+            UserRepository userRepository) {
         this.requestRepository = requestRepository;
         this.practitionerRepository = practitionerRepository;
         this.userRepository = userRepository;
@@ -39,7 +39,8 @@ public class PractitionerRequestService {
                 .collect(Collectors.toList());
     }
 
-    // ================= GET REQUESTS FOR PRACTITIONER (LATEST FIRST) =================
+    // ================= GET REQUESTS FOR PRACTITIONER (LATEST FIRST)
+    // =================
     @Transactional(readOnly = true)
     public List<PractitionerRequestDTO> getRequestsForPractitioner(Integer practitionerId) {
         List<PractitionerRequest> requests = requestRepository.findByPractitionerId(practitionerId);
@@ -48,7 +49,8 @@ public class PractitionerRequestService {
                 .collect(Collectors.toList());
     }
 
-    // ================= GET PENDING REQUESTS FOR PRACTITIONER (LATEST FIRST) =================
+    // ================= GET PENDING REQUESTS FOR PRACTITIONER (LATEST FIRST)
+    // =================
     @Transactional(readOnly = true)
     public List<PractitionerRequestDTO> getPendingRequestsForPractitioner(Integer practitionerId) {
         List<PractitionerRequest> requests = requestRepository.findPendingByPractitionerId(practitionerId);
@@ -97,14 +99,27 @@ public class PractitionerRequestService {
 
     // ================= CREATE REQUEST (PATIENT ONLY) =================
     @Transactional
-    public PractitionerRequestDTO createRequest(Integer practitionerId, PractitionerRequest request) {
+    public PractitionerRequestDTO createRequest(Integer practitionerId, PractitionerRequestDTO requestDTO,
+            String userEmail) {
         PractitionerProfile practitioner = practitionerRepository.findById(practitionerId)
                 .orElseThrow(() -> new RuntimeException("Practitioner not found with id: " + practitionerId));
 
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        PractitionerRequest request = new PractitionerRequest();
+        request.setDescription(requestDTO.getDescription());
         request.setPractitioner(practitioner);
+        request.setUser(user);
         request.setStatus(PractitionerRequest.Status.PENDING);
 
-        if (request.getPriority() == null) {
+        if (requestDTO.getPriority() != null && !requestDTO.getPriority().isEmpty()) {
+            try {
+                request.setPriority(PractitionerRequest.Priority.valueOf(requestDTO.getPriority().toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                request.setPriority(PractitionerRequest.Priority.NORMAL);
+            }
+        } else {
             request.setPriority(PractitionerRequest.Priority.NORMAL);
         }
 

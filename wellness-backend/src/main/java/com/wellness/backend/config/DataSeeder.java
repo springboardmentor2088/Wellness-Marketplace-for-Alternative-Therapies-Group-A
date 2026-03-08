@@ -94,11 +94,15 @@ public class DataSeeder implements CommandLineRunner {
             new Product("Resistance Bands Set", "Set of 5 resistance bands for strength training", new BigDecimal("399"), "Yoga & Fitness", 45)
         };
 
+       int savedCount = 0;
         for (Product product : products) {
-            productRepository.save(product);
+            // Check for null to satisfy '@NonNull' type safety
+            if (product != null) {
+                productRepository.save(product);
+                savedCount++;
+            }
         }
 
-        System.out.println("✓ " + products.length + " sample products created successfully!");
+        System.out.println("✓ " + savedCount + " sample products created successfully!");
     }
 }
-

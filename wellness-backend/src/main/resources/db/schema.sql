@@ -13,6 +13,7 @@ CREATE TABLE users (
   email VARCHAR(150) NOT NULL,
   password VARCHAR(255) NOT NULL,
   role ENUM('PATIENT','PRACTITIONER','ADMIN') NOT NULL,
+  email_verified TINYINT(1) DEFAULT 0,
   bio TEXT,
   phone VARCHAR(20) UNIQUE,
   date_of_birth DATE,
@@ -21,6 +22,23 @@ CREATE TABLE users (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY email (email)
+) ENGINE=InnoDB;
+
+
+-- 1️⃣b EMAIL VERIFICATION OTP
+
+DROP TABLE IF EXISTS email_verification_otp;
+CREATE TABLE email_verification_otp (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  email VARCHAR(150) NOT NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 5,
+  resend_available_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_otp_email (email)
 ) ENGINE=InnoDB;
 
 
@@ -116,7 +134,8 @@ CREATE TABLE therapy_session (
     ON DELETE CASCADE,
   CONSTRAINT fk_session_user
     FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
+    UNIQUE KEY unique_practitioner_slot (practitioner_id, session_date, start_time)
 ) ENGINE=InnoDB;
 
 
@@ -156,21 +175,22 @@ CREATE TABLE recommendation (
 ) ENGINE=InnoDB;
 
 
--- 8️⃣ NOTIFICATION
+-- 8️⃣ NOTIFICATIONS
 
-DROP TABLE IF EXISTS notification;
-CREATE TABLE notification (
-  id INT NOT NULL AUTO_INCREMENT,
-  user_id INT NOT NULL,
-  type VARCHAR(100) NOT NULL,
+DROP TABLE IF EXISTS notifications;
+CREATE TABLE notifications (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  receiver_id BIGINT NOT NULL,
+  receiver_role VARCHAR(20) NOT NULL,
+  session_id BIGINT,
+  type VARCHAR(50) NOT NULL,
   message TEXT NOT NULL,
-  status ENUM('read','unread') DEFAULT 'unread',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_notification_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE
+  is_read BOOLEAN DEFAULT FALSE,
+  email_sent BOOLEAN DEFAULT FALSE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+CREATE INDEX idx_receiver ON notifications (receiver_id, receiver_role);
 
 
 -- 9️⃣ ORDER ITEM

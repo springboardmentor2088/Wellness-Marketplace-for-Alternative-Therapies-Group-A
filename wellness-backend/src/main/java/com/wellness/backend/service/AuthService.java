@@ -1,12 +1,16 @@
 package com.wellness.backend.service;
 
 import com.wellness.backend.dto.AuthResponseDTO;
+import com.wellness.backend.dto.MessageResponseDTO;
 import com.wellness.backend.dto.UserLoginDTO;
 import com.wellness.backend.dto.UserRegisterDTO;
+import com.wellness.backend.dto.VerifyEmailDTO;
 import com.wellness.backend.dto.UserDTO;
 import com.wellness.backend.model.User;
 import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.model.PasswordResetToken;
+import com.wellness.backend.model.EmailVerificationOtp;
+import com.wellness.backend.repository.EmailVerificationOtpRepository;
 import com.wellness.backend.repository.PractitionerProfileRepository;
 import com.wellness.backend.repository.UserRepository;
 import com.wellness.backend.repository.PasswordResetTokenRepository;
@@ -18,14 +22,19 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Optional;
 
 /**
  * Service handling all authentication logic:
- * - User registration
- * - User login
+ * - User registration (with OTP email verification)
+ * - OTP verification
+ * - OTP resend
+ * - User login (blocked if email not verified)
  * - Refresh access token
+ * - Password reset
  */
 @Service
 public class AuthService {
@@ -39,13 +48,15 @@ public class AuthService {
     private final UserService userService;
     private final EmailService emailService;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailVerificationOtpRepository emailVerificationOtpRepository;
 
     @Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
             JwtService jwtService, UserService userService,
             EmailService emailService,
             PractitionerProfileRepository practitionerProfileRepository,
-            PasswordResetTokenRepository passwordResetTokenRepository) {
+            PasswordResetTokenRepository passwordResetTokenRepository,
+            EmailVerificationOtpRepository emailVerificationOtpRepository) {
         this.userRepository = userRepository;
         this.practitionerProfileRepository = practitionerProfileRepository;
         this.passwordEncoder = passwordEncoder;
@@ -53,11 +64,12 @@ public class AuthService {
         this.userService = userService;
         this.emailService = emailService;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailVerificationOtpRepository = emailVerificationOtpRepository;
     }
 
     // ================= REGISTER NEW USER =================
     @Transactional
-    public AuthResponseDTO registerUser(UserRegisterDTO registerDTO) {
+    public MessageResponseDTO registerUser(UserRegisterDTO registerDTO) {
 
         if (userRepository.existsByEmail(registerDTO.getEmail())) {
             throw new RuntimeException("Email is already registered");
@@ -76,44 +88,128 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
         user.setRole(registerDTO.getRole());
         user.setBio(registerDTO.getBio());
+        user.setEmailVerified(false);
 
         // Save user
         User savedUser = userRepository.save(user);
 
-        // Create Practitioner Profile if role is PRACTITIONER
-        if (savedUser.getRole() == User.Role.PRACTITIONER) {
-            PractitionerProfile profile = new PractitionerProfile();
-            profile.setUser(savedUser);
-            profile.setVerified(false); // Default to false
-            profile.setSpecialization("General"); // Default or from DTO if available
-            practitionerProfileRepository.save(profile);
-        }
+        // Generate 6-digit OTP
+        String plainOtp = generateOtp();
+        String otpHash = passwordEncoder.encode(plainOtp);
 
-        // Send role-based registration email
+        // Delete any existing OTP for this email
+        emailVerificationOtpRepository.deleteByEmail(savedUser.getEmail());
+
+        // Save new OTP record
+        EmailVerificationOtp otpRecord = new EmailVerificationOtp();
+        otpRecord.setEmail(savedUser.getEmail());
+        otpRecord.setOtpHash(otpHash);
+        otpRecord.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        otpRecord.setResendAvailableAt(LocalDateTime.now().plusSeconds(60));
+        otpRecord.setAttempts(0);
+        otpRecord.setMaxAttempts(5);
+        emailVerificationOtpRepository.save(otpRecord);
+
+        // Send OTP email (never log the OTP)
         try {
-            if (savedUser.getRole() == User.Role.PRACTITIONER) {
-                emailService.sendPractitionerRegistrationEmail(savedUser.getName(), savedUser.getEmail());
-            } else {
-                emailService.sendUserWelcomeEmail(savedUser.getName(), savedUser.getEmail());
-            }
+            emailService.sendOtpVerificationEmail(savedUser.getName(), savedUser.getEmail(), plainOtp);
         } catch (Exception e) {
-            logger.error("Registration email failed for {}: {}", savedUser.getEmail(), e.getMessage());
+            logger.error("OTP email failed for {}: {}", savedUser.getEmail(), e.getMessage());
         }
 
-        // Generate JWT tokens using email and role
-        String accessToken = jwtService.generateToken(savedUser.getEmail(), savedUser.getRole().toString());
-        String refreshToken = jwtService.generateRefreshToken(savedUser.getEmail());
+        return new MessageResponseDTO("Registration successful. Please verify your email using the OTP sent.");
+    }
 
-        // Map Entity → DTO
-        UserDTO userDTO = userService.mapToDTO(savedUser);
+    // ================= VERIFY EMAIL OTP =================
+    @Transactional
+    public AuthResponseDTO verifyEmail(VerifyEmailDTO dto) {
+        String email = dto.getEmail().trim().toLowerCase();
 
-        // Build response
+        EmailVerificationOtp otpRecord = emailVerificationOtpRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("No pending verification found for this email."));
+
+        if (otpRecord.isExpired()) {
+            throw new RuntimeException("OTP has expired. Please request a new one.");
+        }
+
+        if (otpRecord.isMaxAttemptsReached()) {
+            throw new RuntimeException("Maximum verification attempts reached. Please request a new OTP.");
+        }
+
+        // Check OTP — if wrong, increment attempts
+        if (!passwordEncoder.matches(dto.getOtp(), otpRecord.getOtpHash())) {
+            otpRecord.setAttempts(otpRecord.getAttempts() + 1);
+            emailVerificationOtpRepository.save(otpRecord);
+            int remaining = otpRecord.getMaxAttempts() - otpRecord.getAttempts();
+            throw new RuntimeException("Invalid OTP. " + remaining + " attempt(s) remaining.");
+        }
+
+        // OTP correct — mark user as verified
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found."));
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        // Delete OTP record
+        emailVerificationOtpRepository.deleteByEmail(email);
+
+        // Auto-login: generate JWT tokens so frontend can redirect directly to
+        // dashboard
+        String accessToken = jwtService.generateToken(user.getEmail(), user.getRole().toString());
+        String refreshToken = jwtService.generateRefreshToken(user.getEmail());
+        UserDTO userDTO = userService.mapToDTO(user);
+
         AuthResponseDTO response = new AuthResponseDTO();
         response.setUser(userDTO);
         response.setAccessToken(accessToken);
         response.setRefreshToken(refreshToken);
 
+        logger.info("Email verified and auto-login token issued for user: {}", email);
         return response;
+    }
+
+    // ================= RESEND OTP =================
+    @Transactional
+    public MessageResponseDTO resendOtp(String email) {
+        String normalizedEmail = email.trim().toLowerCase();
+
+        // Check cooldown if record exists (don't reveal if email exists)
+        Optional<EmailVerificationOtp> existing = emailVerificationOtpRepository.findByEmail(normalizedEmail);
+        if (existing.isPresent()) {
+            EmailVerificationOtp record = existing.get();
+            if (record.getResendAvailableAt() != null
+                    && LocalDateTime.now().isBefore(record.getResendAvailableAt())) {
+                throw new RuntimeException("Please wait before requesting another OTP.");
+            }
+            emailVerificationOtpRepository.deleteByEmail(normalizedEmail);
+        }
+
+        // Find user — if not found, return generic message (no email enumeration)
+        Optional<User> userOpt = userRepository.findByEmail(normalizedEmail);
+        if (userOpt.isPresent() && !userOpt.get().isEmailVerified()) {
+            User user = userOpt.get();
+
+            String plainOtp = generateOtp();
+            String otpHash = passwordEncoder.encode(plainOtp);
+
+            EmailVerificationOtp otpRecord = new EmailVerificationOtp();
+            otpRecord.setEmail(normalizedEmail);
+            otpRecord.setOtpHash(otpHash);
+            otpRecord.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+            otpRecord.setResendAvailableAt(LocalDateTime.now().plusSeconds(60));
+            otpRecord.setAttempts(0);
+            otpRecord.setMaxAttempts(5);
+            emailVerificationOtpRepository.save(otpRecord);
+
+            try {
+                emailService.sendOtpVerificationEmail(user.getName(), normalizedEmail, plainOtp);
+            } catch (Exception e) {
+                logger.error("Resend OTP email failed for {}: {}", normalizedEmail, e.getMessage());
+            }
+        }
+
+        // Always return generic message
+        return new MessageResponseDTO("If your email is registered and unverified, a new OTP has been sent.");
     }
 
     // ================= LOGIN EXISTING USER =================
@@ -138,14 +234,22 @@ public class AuthService {
                     identifier.contains("@") ? "Invalid email or password" : "Invalid phone number or password");
         }
 
+        // Block unverified emails (ADMIN is exempt)
+        if (user.getRole() != User.Role.ADMIN && !user.isEmailVerified()) {
+            throw new RuntimeException("Please verify your email before logging in.");
+        }
+
         // Check Verification for Practitioners
         if (user.getRole() == User.Role.PRACTITIONER) {
-            PractitionerProfile profile = practitionerProfileRepository.findByUser_Id(user.getId())
-                    .orElseThrow(() -> new RuntimeException("Practitioner profile not found"));
+            Optional<PractitionerProfile> profileOpt = practitionerProfileRepository.findByUser_Id(user.getId());
 
-            if (!Boolean.TRUE.equals(profile.getVerified())) {
-                throw new RuntimeException("Your account is pending admin verification");
+            if (profileOpt.isPresent()) {
+                PractitionerProfile profile = profileOpt.get();
+                if (!Boolean.TRUE.equals(profile.getVerified())) {
+                    throw new RuntimeException("Your account is pending admin verification");
+                }
             }
+            // If no profile exists yet, allow login so practitioner can complete onboarding
         }
 
         // Generate JWT tokens using email and role
@@ -309,8 +413,15 @@ public class AuthService {
             throw new RuntimeException("Password must contain at least one digit");
         }
 
-        if (!password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*")) {
+        if (!password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\\\"\\\\|,.<>/?].*")) {
             throw new RuntimeException("Password must contain at least one special character (!@#$%^&* etc.)");
         }
+    }
+
+    // ================= GENERATE OTP =================
+    private String generateOtp() {
+        SecureRandom random = new SecureRandom();
+        int otp = 100000 + random.nextInt(900000); // always 6 digits
+        return String.valueOf(otp);
     }
 }

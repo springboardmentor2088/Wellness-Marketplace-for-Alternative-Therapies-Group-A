@@ -83,7 +83,8 @@ public class PractitionerService {
         return mapToDTO(practitioner);
     }
 
-    // ================= CREATE PRACTITIONER PROFILE (PRACTITIONER ONLY) =================
+    // ================= CREATE PRACTITIONER PROFILE (PRACTITIONER ONLY)
+    // =================
     @Transactional
     public PractitionerProfileDTO createPractitionerProfile(PractitionerCreateDTO createDTO) {
         User currentUser = userService.getCurrentAuthenticatedUser();
@@ -93,9 +94,21 @@ public class PractitionerService {
             throw new AccessDeniedException("Only practitioners can create a practitioner profile");
         }
 
-        // Check if profile already exists
-        if (practitionerRepository.existsByUser_Id(currentUser.getId())) {
-            throw new RuntimeException("Practitioner profile already exists for this user");
+        // If profile already exists, update it with the submitted data instead of
+        // ignoring it
+        Optional<PractitionerProfile> existingProfile = practitionerRepository.findByUser_Id(currentUser.getId());
+        if (existingProfile.isPresent()) {
+            logger.info("Practitioner profile already exists for user {}. Updating with onboarding data.",
+                    currentUser.getId());
+            PractitionerProfile profile = existingProfile.get();
+            profile.setSpecialization(createDTO.getSpecialization());
+            if (createDTO.getQualifications() != null) {
+                profile.setQualifications(createDTO.getQualifications());
+            }
+            if (createDTO.getExperience() != null) {
+                profile.setExperience(createDTO.getExperience());
+            }
+            return mapToDTO(practitionerRepository.save(profile));
         }
 
         PractitionerProfile profile = new PractitionerProfile();
@@ -105,6 +118,7 @@ public class PractitionerService {
         profile.setExperience(createDTO.getExperience());
         profile.setVerified(false); // Default to unverified
         profile.setRating(0.0f);
+        profile.setVerificationStatus("PENDING_VERIFICATION");
 
         return mapToDTO(practitionerRepository.save(profile));
     }
@@ -156,6 +170,7 @@ public class PractitionerService {
                 .orElseThrow(() -> new RuntimeException("Practitioner not found with id: " + id));
 
         profile.setVerified(verified);
+        profile.setVerificationStatus(Boolean.TRUE.equals(verified) ? "APPROVED" : "REJECTED");
 
         PractitionerProfile savedProfile = practitionerRepository.save(profile);
 
@@ -206,32 +221,36 @@ public class PractitionerService {
     @Transactional(readOnly = true)
     public OnboardingStatusDTO getOnboardingStatus() {
         User currentUser = userService.getCurrentAuthenticatedUser();
-        
+
         Optional<PractitionerProfile> profile = practitionerRepository.findByUser_Id(currentUser.getId());
-        
+
         if (profile.isEmpty()) {
-            return new OnboardingStatusDTO(false, false); // No profile exists
+            return new OnboardingStatusDTO(false, false, false); // No profile exists
         }
-        
+
         PractitionerProfile practitionerProfile = profile.get();
-        return new OnboardingStatusDTO(true, practitionerProfile.getVerified()); // Profile exists and verification status
+        boolean hasDocuments = !documentRepository.findByPractitionerId(practitionerProfile.getId()).isEmpty();
+        boolean onboardingCompleted = hasDocuments; // Profile exists + has documents = onboarding done
+
+        return new OnboardingStatusDTO(true, practitionerProfile.getVerified(), onboardingCompleted);
+        // status
     }
 
     // ================= UPLOAD DOCUMENTS =================
     @Transactional
     public List<PractitionerDocumentDTO> uploadDocuments(Integer practitionerId, MultipartFile[] files) {
         User currentUser = userService.getCurrentAuthenticatedUser();
-        
+
         PractitionerProfile practitioner = practitionerRepository.findById(practitionerId)
                 .orElseThrow(() -> new RuntimeException("Practitioner not found with id: " + practitionerId));
-        
+
         // Allow only the practitioner themselves or ADMIN
         if (!practitioner.getUser().getId().equals(currentUser.getId()) && currentUser.getRole() != User.Role.ADMIN) {
             throw new AccessDeniedException("You are not allowed to upload documents for this practitioner");
         }
-        
+
         List<PractitionerDocumentDTO> uploadedDocs = new java.util.ArrayList<>();
-        
+
         // Create upload directory if it doesn't exist
         String uploadDir = "uploads/practitioner_documents/" + practitionerId;
         try {
@@ -240,37 +259,37 @@ public class PractitionerService {
             logger.error("Failed to create upload directory: {}", e.getMessage());
             throw new RuntimeException("Failed to create upload directory");
         }
-        
+
         for (MultipartFile file : files) {
             if (!file.isEmpty() && "application/pdf".equals(file.getContentType())) {
                 try {
                     // Generate unique filename
                     String uniqueFileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
                     String filePath = uploadDir + "/" + uniqueFileName;
-                    
+
                     // Save file
                     Files.write(Paths.get(filePath), file.getBytes());
-                    
+
                     // Save document record in database
                     PractitionerDocument document = new PractitionerDocument(
                             practitioner,
                             file.getOriginalFilename(),
                             filePath,
                             file.getSize(),
-                            file.getContentType()
-                    );
-                    
+                            file.getContentType());
+
                     PractitionerDocument savedDoc = documentRepository.save(document);
                     uploadedDocs.add(mapDocumentToDTO(savedDoc));
-                    
-                    logger.info("Document uploaded successfully for practitioner {}: {}", practitionerId, file.getOriginalFilename());
+
+                    logger.info("Document uploaded successfully for practitioner {}: {}", practitionerId,
+                            file.getOriginalFilename());
                 } catch (IOException e) {
                     logger.error("Failed to upload file {}: {}", file.getOriginalFilename(), e.getMessage());
                     throw new RuntimeException("Failed to upload file: " + file.getOriginalFilename());
                 }
             }
         }
-        
+
         return uploadedDocs;
     }
 
@@ -287,7 +306,7 @@ public class PractitionerService {
     @Transactional(readOnly = true)
     public List<PractitionerDocumentDTO> getMyDocuments() {
         User currentUser = userService.getCurrentAuthenticatedUser();
-        
+
         return documentRepository.findByPractitionerUserId(currentUser.getId())
                 .stream()
                 .map(this::mapDocumentToDTO)
@@ -298,22 +317,23 @@ public class PractitionerService {
     @Transactional
     public void deleteDocument(Integer documentId) {
         User currentUser = userService.getCurrentAuthenticatedUser();
-        
+
         PractitionerDocument document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new RuntimeException("Document not found with id: " + documentId));
-        
+
         // Allow only the practitioner themselves or ADMIN
-        if (!document.getPractitioner().getUser().getId().equals(currentUser.getId()) && currentUser.getRole() != User.Role.ADMIN) {
+        if (!document.getPractitioner().getUser().getId().equals(currentUser.getId())
+                && currentUser.getRole() != User.Role.ADMIN) {
             throw new AccessDeniedException("You are not allowed to delete this document");
         }
-        
+
         try {
             // Delete file from filesystem
             Files.deleteIfExists(Paths.get(document.getFilePath()));
         } catch (IOException e) {
             logger.warn("Failed to delete file from filesystem: {}", e.getMessage());
         }
-        
+
         // Delete from database
         documentRepository.delete(document);
     }
@@ -343,9 +363,9 @@ public class PractitionerService {
                 document.getFilePath(),
                 document.getFileSize(),
                 document.getFileType(),
-                document.getUploadedAt()
-        );
+                document.getUploadedAt());
     }
+
     private PractitionerProfileDTO mapToDTO(PractitionerProfile profile) {
 
         PractitionerProfileDTO dto = new PractitionerProfileDTO();
@@ -360,6 +380,7 @@ public class PractitionerService {
         dto.setBio(profile.getUser().getBio());
         dto.setQualifications(profile.getQualifications());
         dto.setExperience(profile.getExperience());
+        dto.setVerificationStatus(profile.getVerificationStatus());
         dto.setCreatedAt(profile.getCreatedAt());
 
         return dto;

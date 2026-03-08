@@ -23,9 +23,11 @@ export default function AdminDashboard() {
       try {
         setLoading(true);
         console.log("Fetching practitioners from /api/practitioners");
+        const token = localStorage.getItem("accessToken");
         const response = await axios.get("/api/practitioners", {
           headers: {
             "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         });
         console.log("Success! Response data:", response.data);
@@ -34,10 +36,11 @@ export default function AdminDashboard() {
           id: practitioner.id,
           fullName: practitioner.userName,
           email: practitioner.email,
-          specialization: practitioner.specialization,
-          qualifications: practitioner.qualifications || "Not provided",
-          experience: practitioner.experience || "Not provided",
+          specialization: practitioner.specialization ?? "Not provided",
+          qualifications: practitioner.qualifications ?? "Not provided",
+          experience: practitioner.experience ?? "Not provided",
           status: practitioner.verified ? "approved" : "pending",
+          verificationStatus: practitioner.verificationStatus || "PENDING_VERIFICATION",
           submittedDate: practitioner.createdAt
             ? new Date(practitioner.createdAt).toLocaleDateString()
             : new Date().toLocaleDateString(),
@@ -114,7 +117,7 @@ export default function AdminDashboard() {
       await axios.put(
         `/api/practitioners/${id}/verify`,
         {},
-        { 
+        {
           params: { verified: true },
           headers: {
             Authorization: `Bearer ${token}`,
@@ -138,7 +141,7 @@ export default function AdminDashboard() {
       await axios.put(
         `/api/practitioners/${id}/verify`,
         {},
-        { 
+        {
           params: { verified: false },
           headers: {
             Authorization: `Bearer ${token}`,
@@ -310,11 +313,10 @@ export default function AdminDashboard() {
                     <div
                       key={practitioner.id}
                       onClick={() => setSelectedPractitioner(practitioner)}
-                      className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition ${
-                        selectedPractitioner?.id === practitioner.id
+                      className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition ${selectedPractitioner?.id === practitioner.id
                           ? "bg-blue-50 border-l-4 border-l-[#1f6f66]"
                           : ""
-                      }`}
+                        }`}
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
@@ -563,11 +565,10 @@ export default function AdminDashboard() {
                     <div
                       key={request.id}
                       onClick={() => setSelectedRequest(request)}
-                      className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition ${
-                        selectedRequest?.id === request.id
+                      className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition ${selectedRequest?.id === request.id
                           ? "bg-blue-50 border-l-4 border-l-[#1f6f66]"
                           : ""
-                      }`}
+                        }`}
                     >
                       <div className="flex justify-between items-start gap-2">
                         <div className="flex-1 min-w-0">

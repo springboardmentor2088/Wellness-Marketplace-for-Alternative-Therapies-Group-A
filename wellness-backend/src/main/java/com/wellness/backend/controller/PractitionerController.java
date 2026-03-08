@@ -44,8 +44,8 @@ public class PractitionerController {
         return ResponseEntity.ok(practitionerService.getAllVerifiedPractitioners());
     }
 
-    // ================= CREATE PROFILE (AUTHENTICATED USERS) =================
-    @PreAuthorize("isAuthenticated()")
+    // ================= CREATE PROFILE (PRACTITIONER ONLY) =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
     @PostMapping
     public ResponseEntity<PractitionerProfileDTO> createPractitionerProfile(
             @Valid @RequestBody PractitionerCreateDTO createDTO) {
@@ -129,7 +129,8 @@ public class PractitionerController {
                 practitionerService.uploadDocuments(practitionerId, files));
     }
 
-    // ================= GET ALL DOCUMENTS FOR A PRACTITIONER (ADMIN) =================
+    // ================= GET ALL DOCUMENTS FOR A PRACTITIONER (ADMIN)
+    // =================
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/{practitionerId}/documents")
     public ResponseEntity<List<PractitionerDocumentDTO>> getDocumentsForPractitioner(
@@ -166,8 +167,17 @@ public class PractitionerController {
         PractitionerDocument document = practitionerService.getDocumentById(documentId);
 
         try {
+            // 1. Get the path
             Path filePath = Paths.get(document.getFilePath()).toAbsolutePath().normalize();
-            Resource resource = new org.springframework.core.io.UrlResource(filePath.toUri());
+
+            // 2. Convert to URI and ensure it is not null to satisfy @NonNull URI
+            java.net.URI fileUri = filePath.toUri();
+            if (fileUri == null) {
+                return ResponseEntity.internalServerError().build();
+            }
+
+            // 3. Create the resource
+            Resource resource = new org.springframework.core.io.UrlResource(fileUri);
 
             if (!resource.exists()) {
                 return ResponseEntity.notFound().build();

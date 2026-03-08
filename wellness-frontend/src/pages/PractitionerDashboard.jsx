@@ -4,10 +4,11 @@ import toast from 'react-hot-toast';
 import axios from 'axios';
 import { getAccessToken } from '../services/authService';
 import { getCurrentUser, updateUser } from '../services/userService';
-import { getRequestsForPractitioner, acceptRequest, rejectRequest, completeRequest, cancelRequest } from '../services/requestService';
+import { getRequestsForPractitioner, acceptRequest, rejectRequest, completeRequest } from '../services/requestService';
 import { getSessionsForPractitioner, getAvailability, setAvailability } from '../services/sessionService';
 import SessionCard from '../components/SessionCard';
 import AvailabilityDayCard from '../components/AvailabilityDayCard';
+import NotificationDropdown from '../components/NotificationDropdown';
 
 export default function PractitionerDashboard() {
   const navigate = useNavigate();
@@ -27,8 +28,18 @@ export default function PractitionerDashboard() {
   const [practSessions, setPractSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [availability, setAvailabilityState] = useState([]);
-  const [savingAvail, setSavingAvail] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+  const [scheduleData, setScheduleData] = useState(
+    DAYS.map((day, idx) => ({
+      dayOfWeek: day,
+      startTime: '09:00',
+      endTime: '17:00',
+      isAvailable: idx < 5,
+      slotDuration: 60
+    }))
+  );
+  const [slotDuration, setSlotDuration] = useState(60);
 
   useEffect(() => {
     const initDashboard = async () => {
@@ -207,14 +218,60 @@ export default function PractitionerDashboard() {
     }
   }, [activeSection, practitionerProfile?.id]);
 
-  // Fetch availability when availability section is opened
+  // Fetch availability when availability or schedule section is opened
   useEffect(() => {
-    if (activeSection === 'availability' && practitionerProfile?.id) {
+    if ((activeSection === 'availability' || activeSection === 'schedule') && practitionerProfile?.id) {
       getAvailability(practitionerProfile.id)
-        .then(data => setAvailabilityState(data))
+        .then(data => {
+          setAvailabilityState(data);
+          // Populate schedule form from saved availability
+          if (data && data.length > 0) {
+            setScheduleData(prev => prev.map(item => {
+              const saved = data.find(d => d.dayOfWeek === item.dayOfWeek);
+              if (saved) {
+                return {
+                  ...item,
+                  startTime: saved.startTime?.substring(0, 5) || '09:00',
+                  endTime: saved.endTime?.substring(0, 5) || '17:00',
+                  isAvailable: saved.isAvailable !== false,
+                  slotDuration: saved.slotDuration || 60
+                };
+              }
+              return item;
+            }));
+            const firstSlot = data.find(d => d.slotDuration);
+            if (firstSlot) setSlotDuration(firstSlot.slotDuration);
+          }
+        })
         .catch(err => console.error('Failed to load availability:', err));
     }
   }, [activeSection, practitionerProfile?.id]);
+
+  // Save schedule handler
+  const handleSaveSchedule = async () => {
+    if (!practitionerProfile?.id) {
+      toast.error('Practitioner profile not loaded');
+      return;
+    }
+    setSavingSchedule(true);
+    try {
+      for (const day of scheduleData) {
+        await setAvailability(practitionerProfile.id, {
+          dayOfWeek: day.dayOfWeek,
+          startTime: day.startTime,
+          endTime: day.endTime,
+          slotDuration: slotDuration,
+          isAvailable: day.isAvailable
+        });
+      }
+      toast.success('Schedule saved successfully!');
+    } catch (err) {
+      console.error('Error saving schedule:', err);
+      toast.error(err.response?.data?.message || 'Failed to save schedule');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
 
 
   if (loading) {
@@ -376,6 +433,29 @@ export default function PractitionerDashboard() {
 
       {/* Main Content */}
       <div className="ml-64 flex-1 p-8">
+        {/* Top Header Bar */}
+        <div className="flex justify-end items-center mb-6">
+          <NotificationDropdown />
+        </div>
+
+        {/* Pending Verification Banner */}
+        {!isVerified && (
+          <div className="mb-6 bg-amber-50 border border-amber-300 rounded-xl p-5 flex items-start gap-4 shadow-sm">
+            <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-2xl flex-shrink-0">
+              ⏳
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-bold text-amber-900">Pending Verification</h3>
+              <p className="text-sm text-amber-800 mt-1">
+                Your practitioner profile is currently under review by our admin team.
+                Some features may be limited until your account is approved.
+              </p>
+              <span className="inline-block mt-2 px-3 py-1 bg-amber-200 text-amber-900 rounded-full text-xs font-semibold">
+                Status: PENDING_VERIFICATION
+              </span>
+            </div>
+          </div>
+        )}
         {/* Dashboard Section */}
         {activeSection === 'dashboard' && (
           <>
@@ -631,6 +711,45 @@ export default function PractitionerDashboard() {
           </>
         )}
 
+        {/* Sessions Section */}
+        {activeSection === 'sessions' && (
+          <>
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-slate-900">My Sessions</h2>
+              <p className="text-slate-600 text-sm mt-2">View and manage all booked therapy sessions</p>
+            </div>
+
+            {loadingSessions ? (
+              <div className="flex justify-center py-16">
+                <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : practSessions.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
+                <p className="text-5xl mb-4">📭</p>
+                <p className="text-gray-500 font-medium">No sessions found</p>
+                <p className="text-gray-400 text-sm mt-1">Sessions booked by patients will appear here</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {practSessions.map(session => (
+                  <SessionCard
+                    key={session.id}
+                    session={session}
+                    role="PRACTITIONER"
+                    onRefresh={() => {
+                      setLoadingSessions(true);
+                      getSessionsForPractitioner(practitionerProfile.id)
+                        .then(data => setPractSessions(data))
+                        .catch(err => console.error('Failed to refresh sessions:', err))
+                        .finally(() => setLoadingSessions(false));
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {/* Patients Section */}
         {activeSection === 'patients' && (
           <>
@@ -706,27 +825,40 @@ export default function PractitionerDashboard() {
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Working Hours</h3>
                 <div className="space-y-3">
                   {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <span className="text-sm font-medium text-slate-900">{day}</span>
+                    <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${scheduleData[idx].isAvailable ? 'bg-slate-50' : 'bg-slate-100 opacity-60'}`}>
+                      <span className="text-sm font-medium text-slate-900 w-24">{day}</span>
                       <div className="flex items-center gap-3">
                         <input
                           type="time"
                           className="px-3 py-1 border border-slate-300 rounded text-sm"
-                          defaultValue="09:00"
+                          value={scheduleData[idx].startTime}
+                          disabled={!scheduleData[idx].isAvailable}
+                          onChange={(e) => setScheduleData(prev => prev.map((item, i) => i === idx ? { ...item, startTime: e.target.value } : item))}
                         />
                         <span className="text-slate-600">to</span>
                         <input
                           type="time"
                           className="px-3 py-1 border border-slate-300 rounded text-sm"
-                          defaultValue="17:00"
+                          value={scheduleData[idx].endTime}
+                          disabled={!scheduleData[idx].isAvailable}
+                          onChange={(e) => setScheduleData(prev => prev.map((item, i) => i === idx ? { ...item, endTime: e.target.value } : item))}
                         />
-                        <input type="checkbox" className="w-5 h-5" defaultChecked={idx < 5} />
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5"
+                          checked={scheduleData[idx].isAvailable}
+                          onChange={(e) => setScheduleData(prev => prev.map((item, i) => i === idx ? { ...item, isAvailable: e.target.checked } : item))}
+                        />
                       </div>
                     </div>
                   ))}
                 </div>
-                <button className="w-full mt-4 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all">
-                  Save Schedule
+                <button
+                  onClick={handleSaveSchedule}
+                  disabled={savingSchedule}
+                  className="w-full mt-4 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 disabled:bg-gray-300 transition-all"
+                >
+                  {savingSchedule ? 'Saving...' : 'Save Schedule'}
                 </button>
               </div>
 
@@ -735,31 +867,15 @@ export default function PractitionerDashboard() {
                 <div className="space-y-4">
                   <div className="bg-white rounded-lg p-4 border border-green-200">
                     <label className="block text-sm font-medium text-slate-900 mb-2">Session Duration</label>
-                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-                      <option>30 minutes</option>
-                      <option>45 minutes</option>
-                      <option>60 minutes</option>
-                      <option>90 minutes</option>
-                    </select>
-                  </div>
-
-                  <div className="bg-white rounded-lg p-4 border border-green-200">
-                    <label className="block text-sm font-medium text-slate-900 mb-2">Buffer Time</label>
-                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-                      <option>No buffer</option>
-                      <option>5 minutes</option>
-                      <option>10 minutes</option>
-                      <option>15 minutes</option>
-                    </select>
-                  </div>
-
-                  <div className="bg-white rounded-lg p-4 border border-green-200">
-                    <label className="block text-sm font-medium text-slate-900 mb-2">Advance Booking</label>
-                    <select className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-                      <option>1 day</option>
-                      <option>3 days</option>
-                      <option>1 week</option>
-                      <option>2 weeks</option>
+                    <select
+                      value={slotDuration}
+                      onChange={(e) => setSlotDuration(parseInt(e.target.value))}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value={30}>30 minutes</option>
+                      <option value={45}>45 minutes</option>
+                      <option value={60}>60 minutes</option>
+                      <option value={90}>90 minutes</option>
                     </select>
                   </div>
                 </div>

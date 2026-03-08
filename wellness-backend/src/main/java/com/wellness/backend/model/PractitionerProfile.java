@@ -33,6 +33,9 @@ public class PractitionerProfile {
     @Column(name = "experience", length = 100)
     private String experience;
 
+    @Column(name = "verification_status", nullable = false, length = 30)
+    private String verificationStatus = "PENDING_VERIFICATION";
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -96,6 +99,14 @@ public class PractitionerProfile {
 
     public void setExperience(String experience) {
         this.experience = experience;
+    }
+
+    public String getVerificationStatus() {
+        return verificationStatus;
+    }
+
+    public void setVerificationStatus(String verificationStatus) {
+        this.verificationStatus = verificationStatus;
     }
 
     public LocalDateTime getCreatedAt() {
