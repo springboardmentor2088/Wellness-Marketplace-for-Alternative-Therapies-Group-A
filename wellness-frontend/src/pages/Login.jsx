@@ -1,8 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";  // ← remove useEffect
 import toast from "react-hot-toast";
-
-import { loginUser, storeAuthData, getAccessToken, getStoredUser } from "../services/authService";
+import { loginUser, storeAuthData } from "../services/authService";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -51,21 +50,33 @@ export default function Login() {
           if (onboardingResponse.ok) {
             const onboardingStatus = await onboardingResponse.json();
 
-            if (!onboardingStatus.profileExists || !onboardingStatus.verified) {
+            // ============================================================
+            // UPDATE: SYNC LOCAL STORAGE WITH ONBOARDING STATUS
+            // This ensures RoleBasedRoute knows whether to allow dashboard access
+            // ============================================================
+            const isComplete = onboardingStatus.onboardingCompleted;
+            const updatedUser = {
+              ...data.user,
+              onboardingCompleted: isComplete
+            };
+            localStorage.setItem("user", JSON.stringify(updatedUser));
+
+            if (!isComplete) {
+              // FIXED PATH: Changed from /practitioner/PractitionerOnboarding to /practitioner/onboarding
               navigate("/practitioner/onboarding");
             } else {
               navigate("/practitioner/dashboard");
             }
           } else {
-            navigate("/practitioner/dashboard");
+            // Default to onboarding if check fails to ensure data is collected
+            navigate("/practitioner/onboarding");
           }
         } catch (err) {
           console.error("Error checking onboarding status:", err);
-          navigate("/practitioner/dashboard");
+          navigate("/practitioner/onboarding");
         }
       } else if (data.user.role === "ADMIN") {
         // Admin users are protected by RoleBasedRoute
-        // No localStorage flag needed - role is verified from JWT token on backend
         navigate("/admin/dashboard");
       } else {
         navigate("/user/dashboard");

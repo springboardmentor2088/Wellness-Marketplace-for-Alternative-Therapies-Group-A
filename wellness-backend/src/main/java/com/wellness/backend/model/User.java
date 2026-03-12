@@ -43,6 +43,9 @@ public class User {
 
     private LocalDateTime createdAt;
 
+    @Column(name = "email_verified", columnDefinition = "TINYINT(1) DEFAULT 0")
+    private boolean emailVerified = false;
+
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
@@ -127,5 +130,13 @@ public class User {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
     }
 }

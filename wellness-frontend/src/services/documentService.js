@@ -4,7 +4,7 @@ const API_BASE_URL = "/api/practitioners";
 
 export const uploadDocuments = async (practitionerId, files) => {
   const formData = new FormData();
-  
+
   files.forEach((file) => {
     formData.append("files", file);
   });
@@ -15,7 +15,6 @@ export const uploadDocuments = async (practitionerId, files) => {
       formData,
       {
         headers: {
-          "Content-Type": "multipart/form-data",
           "Authorization": `Bearer ${localStorage.getItem("accessToken")}`
         }
       }

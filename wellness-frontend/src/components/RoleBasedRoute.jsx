@@ -1,78 +1,147 @@
+import React from "react";
 import { Navigate } from "react-router-dom";
 import { getAccessToken, getStoredUser } from "../services/authService";
 import { isTokenValid, getRoleFromToken } from "../services/jwtService";
 
 /**
  * Role-Based Route Protection Component
- * Checks JWT token and user role from backend-validated data
- * @param {ReactNode} children - Component to render if authorized
- * @param {string|string[]} allowedRoles - Role(s) that can access this route
- * @returns {ReactNode} Protected component or redirect to login/unauthorized
+ * - Validates JWT token
+ * - Checks expiration
+ * - Extracts role from token
+ * - Supports multiple roles
+ * - Handles onboarding redirect for practitioners
  */
-export const RoleBasedRoute = ({ children, allowedRoles }) => {
+export const RoleBasedRoute = ({ children, allowedRoles, skipOnboardingCheck = false }) => {
   const accessToken = getAccessToken();
   const storedUser = getStoredUser();
 
-  // 1. Check if token exists
+  /* ========================================
+     1️⃣ Check if access token exists
+  ======================================== */
   if (!accessToken) {
     console.warn("No access token found");
     return <Navigate to="/login" replace />;
   }
 
-  // 2. Validate token structure and expiration
+  /* ========================================
+     2️⃣ Validate token (structure + expiry)
+  ======================================== */
   if (!isTokenValid(accessToken)) {
-    console.warn("Access token is invalid or expired");
+    console.warn("Access token invalid or expired. Clearing storage.");
+
     localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
     localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userRole");
+
     return <Navigate to="/login" replace />;
   }
 
-  // 3. Get role from token (backend source of truth)
-  const userRole = storedUser?.role;
+  /* ========================================
+     3️⃣ Get role from JWT (Primary Source)
+  ======================================== */
+  let userRole = getRoleFromToken(accessToken);
+
+  /* ========================================
+     4️⃣ Fallback to stored user role
+  ======================================== */
+  if (!userRole && storedUser?.role) {
+    userRole = storedUser.role;
+    console.warn("Using fallback role from stored user");
+  }
 
   if (!userRole) {
-    console.warn("No user role found in stored user data");
+    console.warn("No user role found.");
     return <Navigate to="/login" replace />;
   }
 
-  // 4. Normalize roles to array for comparison
-  const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+  /* ========================================
+     5️⃣ STRICT PRACTITIONER ONBOARDING CHECK
+  ======================================== */
+  if (
+    !skipOnboardingCheck &&
+    userRole === "PRACTITIONER" &&
+    storedUser?.onboardingCompleted !== true
+  ) {
+    console.warn("Practitioner onboarding incomplete. Redirecting.");
+    return <Navigate to="/practitioner/onboarding" replace />;
+  }
 
-  // 5. Check if user has required role
-  if (!rolesArray.includes(userRole)) {
-    console.warn(`User role '${userRole}' not in allowed roles: ${rolesArray.join(", ")}`);
+  /* ========================================
+     6️⃣ Normalize allowed roles to array
+  ======================================== */
+  const rolesArray = Array.isArray(allowedRoles)
+    ? allowedRoles
+    : [allowedRoles];
+
+  /* ========================================
+     7️⃣ Handle USER / PATIENT compatibility
+  ======================================== */
+  const normalizedUserRole =
+    userRole === "PATIENT" ? "USER" : userRole;
+
+  const normalizedAllowedRoles = rolesArray.map((role) =>
+    role === "PATIENT" ? "USER" : role
+  );
+
+  /* ========================================
+     8️⃣ Final Access Check
+  ======================================== */
+  const hasAccess =
+    normalizedAllowedRoles.includes(normalizedUserRole) ||
+    rolesArray.includes(userRole);
+
+  if (!hasAccess) {
+    console.warn(
+      `User role '${userRole}' not allowed. Required: ${rolesArray.join(", ")}`
+    );
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // 6. All checks passed - render child component
+  /* ========================================
+     9️⃣ All checks passed
+  ======================================== */
   return children;
 };
 
-/**
- * Helper component for Admin-only routes
- */
-export const AdminRoute = ({ children }) => {
-  return <RoleBasedRoute allowedRoles="ADMIN">{children}</RoleBasedRoute>;
-};
+/* =========================================================
+   Helper Components
+========================================================= */
 
 /**
- * Helper component for Practitioner-only routes
+ * Admin-only route
  */
-export const PractitionerRoute = ({ children }) => {
-  return <RoleBasedRoute allowedRoles="PRACTITIONER">{children}</RoleBasedRoute>;
-};
+export const AdminRoute = ({ children }) => (
+  <RoleBasedRoute allowedRoles="ADMIN">
+    {children}
+  </RoleBasedRoute>
+);
 
 /**
- * Helper component for Patient-only routes
+ * Practitioner-only route
  */
-export const PatientRoute = ({ children }) => {
-  return <RoleBasedRoute allowedRoles="PATIENT">{children}</RoleBasedRoute>;
-};
+export const PractitionerRoute = ({ children }) => (
+  <RoleBasedRoute allowedRoles="PRACTITIONER">
+    {children}
+  </RoleBasedRoute>
+);
 
 /**
- * Helper component for multiple roles
+ * Patient/User route (supports both)
  */
-export const MultiRoleRoute = ({ children, roles }) => {
-  return <RoleBasedRoute allowedRoles={roles}>{children}</RoleBasedRoute>;
-};
+export const PatientRoute = ({ children }) => (
+  <RoleBasedRoute allowedRoles={["PATIENT", "USER"]}>
+    {children}
+  </RoleBasedRoute>
+);
+
+/**
+ * Multiple role route
+ */
+export const MultiRoleRoute = ({ children, roles }) => (
+  <RoleBasedRoute allowedRoles={roles}>
+    {children}
+  </RoleBasedRoute>
+);
+
+export default RoleBasedRoute;

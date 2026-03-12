@@ -1,11 +1,11 @@
 package com.wellness.backend.controller;
 
 import com.wellness.backend.dto.PractitionerRequestDTO;
-import com.wellness.backend.model.PractitionerRequest;
 import com.wellness.backend.service.PractitionerRequestService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,7 +29,8 @@ public class PractitionerRequestController {
         return ResponseEntity.ok(requests);
     }
 
-    // ================= GET ALL REQUESTS FOR PRACTITIONER (LATEST FIRST) =================
+    // ================= GET ALL REQUESTS FOR PRACTITIONER (LATEST FIRST)
+    // =================
     @PreAuthorize("hasAnyRole('PRACTITIONER', 'ADMIN')")
     @GetMapping("/practitioner/{practitionerId}")
     public ResponseEntity<List<PractitionerRequestDTO>> getRequestsForPractitioner(
@@ -38,7 +39,8 @@ public class PractitionerRequestController {
         return ResponseEntity.ok(requests);
     }
 
-    // ================= GET PENDING REQUESTS FOR PRACTITIONER (LATEST FIRST) =================
+    // ================= GET PENDING REQUESTS FOR PRACTITIONER (LATEST FIRST)
+    // =================
     @PreAuthorize("hasAnyRole('PRACTITIONER', 'ADMIN')")
     @GetMapping("/practitioner/{practitionerId}/pending")
     public ResponseEntity<List<PractitionerRequestDTO>> getPendingRequestsForPractitioner(
@@ -81,8 +83,10 @@ public class PractitionerRequestController {
     @PostMapping("/create/{practitionerId}")
     public ResponseEntity<PractitionerRequestDTO> createRequest(
             @PathVariable Integer practitionerId,
-            @RequestBody PractitionerRequest request) {
-        PractitionerRequestDTO createdRequest = requestService.createRequest(practitionerId, request);
+            @RequestBody PractitionerRequestDTO requestDTO,
+            Authentication authentication) {
+        String userEmail = authentication.getName();
+        PractitionerRequestDTO createdRequest = requestService.createRequest(practitionerId, requestDTO, userEmail);
         return ResponseEntity.ok(createdRequest);
     }
 

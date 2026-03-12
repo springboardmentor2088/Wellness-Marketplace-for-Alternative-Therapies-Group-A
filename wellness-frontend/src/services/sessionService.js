@@ -2,95 +2,62 @@
 // SESSION SERVICE - Therapy Sessions API
 // ============================================
 
-const API_BASE = "http://localhost:8081/api";
+import axios from "axios";
+import { getAccessToken } from "./authService";
 
-const authHeaders = () => ({
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+const API_BASE = "/api";
+
+const getAuthHeaders = () => ({
+    headers: {
+        Authorization: `Bearer ${getAccessToken()}`,
+        "Content-Type": "application/json",
+    },
 });
 
 // Book a new session
 export const bookSession = async (data) => {
-    const res = await fetch(`${API_BASE}/sessions/book`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify(data),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.post(`${API_BASE}/sessions/book`, data, getAuthHeaders());
+    return response.data;
 };
 
 // Cancel a session
 export const cancelSession = async (sessionId, cancelledBy = "USER", reason = "") => {
-    const res = await fetch(`${API_BASE}/sessions/${sessionId}/cancel`, {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify({ cancelledBy, reason }),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.put(`${API_BASE}/sessions/${sessionId}/cancel`, { cancelledBy, reason }, getAuthHeaders());
+    return response.data;
 };
 
 // Reschedule a session
 export const rescheduleSession = async (sessionId, data) => {
-    const res = await fetch(`${API_BASE}/sessions/${sessionId}/reschedule`, {
-        method: "PUT",
-        headers: authHeaders(),
-        body: JSON.stringify(data),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.put(`${API_BASE}/sessions/${sessionId}/reschedule`, data, getAuthHeaders());
+    return response.data;
 };
 
 // Get all sessions for a user
 export const getSessionsForUser = async (userId) => {
-    const res = await fetch(`${API_BASE}/sessions/user/${userId}`, {
-        headers: authHeaders(),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.get(`${API_BASE}/sessions/user/${userId}`, getAuthHeaders());
+    return response.data;
 };
 
 // Get all sessions for a practitioner
 export const getSessionsForPractitioner = async (practitionerId) => {
-    const res = await fetch(`${API_BASE}/sessions/practitioner/${practitionerId}`, {
-        headers: authHeaders(),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.get(`${API_BASE}/sessions/practitioner/${practitionerId}`, getAuthHeaders());
+    return response.data;
 };
 
 // Get available time slots for a practitioner on a specific date
 export const getAvailableSlots = async (practitionerId, date) => {
-    const res = await fetch(`${API_BASE}/sessions/${practitionerId}/slots?date=${date}`, {
-        headers: authHeaders(),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.get(`${API_BASE}/sessions/${practitionerId}/slots?date=${date}`, getAuthHeaders());
+    return response.data;
 };
 
 // Get practitioner availability schedule
 export const getAvailability = async (practitionerId) => {
-    const res = await fetch(`${API_BASE}/availability/${practitionerId}`);
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.get(`${API_BASE}/availability/${practitionerId}`);
+    return response.data;
 };
 
 // Set/update practitioner availability for a day
 export const setAvailability = async (practitionerId, data) => {
-    const res = await fetch(`${API_BASE}/availability/${practitionerId}`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify(data),
-    });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    const response = await axios.post(`${API_BASE}/availability/${practitionerId}`, data, getAuthHeaders());
+    return response.data;
 };

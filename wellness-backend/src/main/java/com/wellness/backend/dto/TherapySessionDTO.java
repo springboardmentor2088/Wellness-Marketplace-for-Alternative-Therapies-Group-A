@@ -1,6 +1,5 @@
 package com.wellness.backend.dto;
 
-import com.wellness.backend.model.TherapySession;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -15,13 +14,14 @@ public class TherapySessionDTO {
     private LocalTime startTime;
     private LocalTime endTime;
     private Integer duration;
-    private TherapySession.SessionType sessionType;
+    private Double price;
+    private String sessionType;
     private String meetingLink;
-    private TherapySession.Status status;
-    private TherapySession.PaymentStatus paymentStatus;
+    private String status;
+    private String paymentStatus;
     private String notes;
     private String cancellationReason;
-    private TherapySession.CancelledBy cancelledBy;
+    private String cancelledBy;
     private LocalDateTime createdAt;
 
     // Getters and Setters
@@ -97,11 +97,19 @@ public class TherapySessionDTO {
         this.duration = duration;
     }
 
-    public TherapySession.SessionType getSessionType() {
+    public Double getPrice() {
+        return price;
+    }
+
+    public void setPrice(Double price) {
+        this.price = price;
+    }
+
+    public String getSessionType() {
         return sessionType;
     }
 
-    public void setSessionType(TherapySession.SessionType sessionType) {
+    public void setSessionType(String sessionType) {
         this.sessionType = sessionType;
     }
 
@@ -113,19 +121,19 @@ public class TherapySessionDTO {
         this.meetingLink = meetingLink;
     }
 
-    public TherapySession.Status getStatus() {
+    public String getStatus() {
         return status;
     }
 
-    public void setStatus(TherapySession.Status status) {
+    public void setStatus(String status) {
         this.status = status;
     }
 
-    public TherapySession.PaymentStatus getPaymentStatus() {
+    public String getPaymentStatus() {
         return paymentStatus;
     }
 
-    public void setPaymentStatus(TherapySession.PaymentStatus paymentStatus) {
+    public void setPaymentStatus(String paymentStatus) {
         this.paymentStatus = paymentStatus;
     }
 
@@ -145,11 +153,11 @@ public class TherapySessionDTO {
         this.cancellationReason = cancellationReason;
     }
 
-    public TherapySession.CancelledBy getCancelledBy() {
+    public String getCancelledBy() {
         return cancelledBy;
     }
 
-    public void setCancelledBy(TherapySession.CancelledBy cancelledBy) {
+    public void setCancelledBy(String cancelledBy) {
         this.cancelledBy = cancelledBy;
     }
 

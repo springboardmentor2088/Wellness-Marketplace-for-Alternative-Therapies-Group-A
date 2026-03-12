@@ -22,6 +22,7 @@ public class PractitionerRequest {
         LOW,
         NORMAL,
         HIGH,
+        MEDIUM,
         URGENT
     }
 

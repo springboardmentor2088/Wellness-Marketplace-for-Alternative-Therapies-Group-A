@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -10,66 +11,71 @@ import AdminDashboard from "./pages/AdminDashboard.jsx";
 import ProductMarketplace from "./pages/ProductMarketplace.jsx";
 import Cart from "./pages/Cart.jsx";
 import OrderHistory from "./pages/OrderHistory.jsx";
+import BrowseSessions from "./pages/BrowseSessions.jsx";
+import MyBookings from "./pages/MyBookings.jsx";
 import Unauthorized from "./pages/Unauthorized.jsx";
+import VerifyEmail from "./pages/VerifyEmail.jsx";
 import { AdminRoute, PractitionerRoute } from "./components/RoleBasedRoute.jsx";
+import { NotificationProvider } from "./context/NotificationContext.jsx";
 
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 
 function App() {
+
   return (
-    <BrowserRouter>
-      <Toaster position="top-right" />
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<Register />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+    <NotificationProvider>
+      <BrowserRouter>
+        <Toaster position="top-right" />
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
-        {/* Error Routes */}
-        <Route path="/unauthorized" element={<Unauthorized />} />
+          {/* Error Routes */}
+          <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Admin Routes - Role-Based Protection */}
-        <Route
-          path="/admin/dashboard"
-          element={
-            <AdminRoute>
-              <AdminDashboard />
-            </AdminRoute>
-          }
-        />
+          {/* Admin Routes - Role-Based Protection */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
+            }
+          />
 
-        {/* Practitioner Routes - Role-Based Protection */}
-        <Route
-          path="/practitioner/onboarding"
-          element={
-            <PractitionerRoute>
-              <PractitionerOnboarding />
-            </PractitionerRoute>
-          }
-        />
-        <Route
-          path="/practitioner/dashboard"
-          element={
-            <PractitionerRoute>
-              <PractitionerDashboard />
-            </PractitionerRoute>
-          }
-        />
+          {/* Practitioner Onboarding - PUBLIC/BASIC AUTH ONLY to avoid redirect loops */}
+          <Route path="/practitioner/onboarding" element={<PractitionerOnboarding />} />
 
-        {/* User Routes */}
-        <Route path="/user/dashboard" element={<UserDashboard />} />
+          {/* Practitioner Dashboard - FULL PROTECTION */}
+          <Route
+            path="/practitioner/dashboard"
+            element={
+              <PractitionerRoute>
+                <PractitionerDashboard />
+              </PractitionerRoute>
+            }
+          />
 
-        {/* Product Marketplace Routes */}
-        <Route path="/products" element={<ProductMarketplace />} />
-        <Route path="/cart" element={<Cart />} />
-        <Route path="/user/orders" element={<OrderHistory />} />
+          {/* User Routes */}
+          <Route path="/user/dashboard" element={<UserDashboard />} />
+          <Route path="/browse-sessions" element={<BrowseSessions />} />
+          <Route path="/my-bookings" element={<MyBookings />} />
 
-        {/* Fallback Route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Product Marketplace Routes */}
+          <Route path="/products" element={<ProductMarketplace />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/user/orders" element={<OrderHistory />} />
+
+          {/* Fallback Route */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </NotificationProvider>
   );
 }
 

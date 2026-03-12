@@ -6,7 +6,6 @@ import com.wellness.backend.service.AvailabilityService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,7 +24,6 @@ public class AvailabilityController {
     }
 
     // POST /api/availability/{practitionerId} — Set/update availability for a day
-    @PreAuthorize("hasAnyRole('PRACTITIONER', 'ADMIN')")
     @PostMapping("/{practitionerId}")
     public ResponseEntity<AvailabilityDTO> setAvailability(
             @PathVariable Integer practitionerId,
