@@ -31,6 +31,9 @@ public class Product {
     @Column(nullable = false)
     private Integer stock = 0;
 
+    @Column(length = 500)
+    private String imageUrl;
+
     // ================= CONSTRUCTORS =================
     public Product() {
     }
@@ -90,5 +93,13 @@ public class Product {
 
     public void setStock(Integer stock) {
         this.stock = stock;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 }

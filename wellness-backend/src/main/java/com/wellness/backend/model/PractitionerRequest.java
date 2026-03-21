@@ -1,5 +1,7 @@
 package com.wellness.backend.model;
 
+import com.wellness.backend.enums.RequestPriority;
+import com.wellness.backend.enums.RequestStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -10,21 +12,7 @@ import java.time.LocalDateTime;
 @Table(name = "practitioner_request")
 public class PractitionerRequest {
 
-    public enum Status {
-        PENDING,
-        ACCEPTED,
-        REJECTED,
-        COMPLETED,
-        CANCELLED
-    }
 
-    public enum Priority {
-        LOW,
-        NORMAL,
-        HIGH,
-        MEDIUM,
-        URGENT
-    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,11 +31,11 @@ public class PractitionerRequest {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Status status = Status.PENDING;
+    private RequestStatus status = RequestStatus.PENDING;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Priority priority = Priority.NORMAL;
+    private RequestPriority priority = RequestPriority.NORMAL;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -98,19 +86,19 @@ public class PractitionerRequest {
         this.description = description;
     }
 
-    public Status getStatus() {
+    public RequestStatus getStatus() {
         return status;
     }
 
-    public void setStatus(Status status) {
+    public void setStatus(RequestStatus status) {
         this.status = status;
     }
 
-    public Priority getPriority() {
+    public RequestPriority getPriority() {
         return priority;
     }
 
-    public void setPriority(Priority priority) {
+    public void setPriority(RequestPriority priority) {
         this.priority = priority;
     }
 

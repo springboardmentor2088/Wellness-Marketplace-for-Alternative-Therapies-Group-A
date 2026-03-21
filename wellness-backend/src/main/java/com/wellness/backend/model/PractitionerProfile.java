@@ -1,9 +1,11 @@
 package com.wellness.backend.model;
 
+import com.wellness.backend.enums.PractitionerVerificationStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -33,8 +35,15 @@ public class PractitionerProfile {
     @Column(name = "experience", length = 100)
     private String experience;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "verification_status", nullable = false, length = 30)
-    private String verificationStatus = "PENDING_VERIFICATION";
+    private PractitionerVerificationStatus verificationStatus = PractitionerVerificationStatus.PENDING_VERIFICATION;
+
+    @Column(name = "consultation_fee", precision = 10, scale = 2)
+    private BigDecimal consultationFee;
+
+    @Column(name = "rejection_reason", columnDefinition = "TEXT")
+    private String rejectionReason;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -101,11 +110,11 @@ public class PractitionerProfile {
         this.experience = experience;
     }
 
-    public String getVerificationStatus() {
+    public PractitionerVerificationStatus getVerificationStatus() {
         return verificationStatus;
     }
 
-    public void setVerificationStatus(String verificationStatus) {
+    public void setVerificationStatus(PractitionerVerificationStatus verificationStatus) {
         this.verificationStatus = verificationStatus;
     }
 
@@ -123,5 +132,21 @@ public class PractitionerProfile {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public BigDecimal getConsultationFee() {
+        return consultationFee;
+    }
+
+    public void setConsultationFee(BigDecimal consultationFee) {
+        this.consultationFee = consultationFee;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
     }
 }

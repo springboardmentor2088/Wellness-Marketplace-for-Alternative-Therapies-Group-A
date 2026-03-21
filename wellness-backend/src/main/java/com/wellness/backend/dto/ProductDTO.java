@@ -26,6 +26,8 @@ public class ProductDTO {
 
     private Boolean available; // Calculated if stock > 0
 
+    private String imageUrl;
+
     // Constructors
     public ProductDTO() {}
 
@@ -94,5 +96,13 @@ public class ProductDTO {
 
     public void setAvailable(Boolean available) {
         this.available = available;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 }

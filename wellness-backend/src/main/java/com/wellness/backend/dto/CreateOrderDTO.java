@@ -18,6 +18,8 @@ public class CreateOrderDTO {
         this.items = items;
     }
 
+    private String deliveryAddress;
+
     // Getters and Setters
     public List<OrderItemDTO> getItems() {
         return items;
@@ -25,5 +27,13 @@ public class CreateOrderDTO {
 
     public void setItems(List<OrderItemDTO> items) {
         this.items = items;
+    }
+
+    public String getDeliveryAddress() {
+        return deliveryAddress;
+    }
+
+    public void setDeliveryAddress(String deliveryAddress) {
+        this.deliveryAddress = deliveryAddress;
     }
 }

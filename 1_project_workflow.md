@@ -13,7 +13,8 @@ The Wellness Platform is a **Spring Boot + React** full-stack application that c
 | Backend | Java 17, Spring Boot 3, Spring Security (JWT), Spring Data JPA |
 | Database | MySQL (`wellness_db`) |
 | Frontend | React 18 + Vite, React Router v6, Vanilla CSS |
-| Real-time | WebSocket (STOMP over SockJS) |
+| Real-time | WebSocket (Native browser implementation) |
+| Payments | Razorpay Integration (Live Signature Verification) |
 | Email | Spring Mail (Gmail SMTP) |
 | Auth | JWT Access + Refresh Tokens + OTP Email Verification |
 | Scheduler | Spring `@Scheduled` |
@@ -51,9 +52,11 @@ wellness-backend (Spring Boot :8081)
 | 9 | `product` | Wellness products for marketplace |
 | 10 | `orders` | Customer orders |
 | 11 | `order_item` | Line items within an order |
-| 12 | `review` | Post-session reviews (schema only, no API yet) |
-| 13 | `question` | Q&A from users (schema only, no API yet) |
-| 14 | `answer` | Practitioner answers to questions (schema only, no API yet) |
+| 12 | `review` | Post-session reviews linked to specific therapy sessions |
+| 13 | `wallet` | Stores user wallet balance |
+| 14 | `wallet_transaction` | Ledger of all wallet credits/debits |
+| 15 | `question` | Q&A from users |
+| 16 | `answer` | Practitioner answers to questions |
 
 ---
 
@@ -78,6 +81,18 @@ wellness-backend (Spring Boot :8081)
 16. Frontend Pages & Routing (All pages + React Router v6)
 17. Bug Fixes (Booking 500 errors, 403 Notification errors, duplicate WebSocket subscriptions,
     OTP redirect, same-tab auth change event, practitioner notification ID mismatch)
+18. Real-time Razorpay Integration (Order creation, Signature verification, auto-booking)
+19. Mandatory Document Upload (Practitioners must upload prescribed docs to complete sessions)
+20. Practitioner Earnings System (Real-time Pending vs. Ready for Payout logic)
+21. Real-time Dashboard Synchronization (WebSocket-triggered state refreshes)
+22. Wallet & Transaction System (Balance, Deposit, Withdrawal, Payment via Wallet)
+23. Advanced Order Tracking (Delivery address, tracking ID, courier partner, status updates)
+24. User Profile Management (Patients can now update name, bio, phone, address, etc.)
+25. Community Forum System (Threads, multi-level Answers, Likes, Solution Acceptance, Moderation & Reporting)
+26. Product Review System (Ratings, comments, and average rating calculation)
+27. Session Review System (Post-therapy feedback for practitioners)
+28. Server-side Cart Persistence (Synchronized cart across sessions/devices)
+29. Enhanced Wallet System (Transaction history and balance management)
 ```
 
 ---
@@ -90,14 +105,16 @@ wellness-backend (Spring Boot :8081)
 3. **Browse Practitioners** → `GET /api/practitioners/verified`
 4. **Check Availability** → `GET /api/availability/{practitionerId}`
 5. **See Available Slots** → `GET /api/sessions/{practitionerId}/slots?date=YYYY-MM-DD`
-6. **Book Session** → `POST /api/sessions/book` → in-app notification fires immediately
-7. **View My Bookings** → `GET /api/sessions/user/{userId}`
-8. **Cancel/Reschedule** → `PUT /api/sessions/{id}/cancel` or `/reschedule` → notification fires
-9. **Browse Products** → `GET /api/products/available`
-10. **Add to Cart** → localStorage cart management
-11. **Checkout** → `POST /api/orders`
-12. **View Order History** → `GET /api/orders/history`
-13. **Receive Notifications** → WebSocket real-time + in-app bell badge (deduped)
+6. **Book Session** → `POST /api/sessions/book` → status: HOLD, payment: PENDING
+7. **Pay Now** → Razorpay Checkout Modal → `POST /api/payments/webhook` → verification → status: BOOKED, payment: PAID
+8. **View My Bookings** → `GET /api/sessions/user/{userId}`
+9. **Cancel/Reschedule** → `PUT /api/sessions/{id}/cancel` or `/reschedule` → notification fires; refunds auto-trigger if paid
+10. **Leave Review** → `POST /api/reviews` → provides feedback for a specific completed session
+11. **Browse Products** → `GET /api/products/available`
+12. **Add to Cart** → localStorage cart management
+13. **Checkout** → `POST /api/orders`
+14. **View Order History** → `GET /api/orders/history`
+15. **Receive Notifications** → WebSocket real-time + in-app bell badge (deduped)
 
 ### 🧑‍⚕️ Practitioner Journey
 1. **Register** → `POST /api/auth/register` (role: PRACTITIONER) → OTP email sent
@@ -107,9 +124,11 @@ wellness-backend (Spring Boot :8081)
 5. **Wait for Admin Verification** → Admin calls `PUT /api/practitioners/{id}/verify`
 6. **Login** → JWT issued, WebSocket connects and subscribes to `/topic/practitioner/{userId}`
 7. **View Dashboard** → `/practitioner/dashboard` with real-time notification bell
-8. **See Upcoming Sessions** → `GET /api/sessions/practitioner/{practitionerId}`
-9. **Handle Patient Requests** → Accept/Reject via `PUT /api/practitioners/requests/{id}/accept`
-10. **Receive Notifications** → Session booked/cancelled by patients, 30-min + 1-hour reminders
+8. **See Upcoming Sessions** → `GET /api/sessions/practitioner/{practitionerId}` (Only paid sessions visible)
+9. **Complete Session** → `PUT /api/sessions/{id}/complete` → **Mandatory** document upload required
+10. **Manage Earnings** → Real-time tracking of Pending vs. Ready for Payout amounts
+11. **Handle Patient Requests** → Accept/Reject via `PUT /api/practitioners/requests/{id}/accept`
+12. **Receive Notifications** → Session booked/paid/cancelled, 30-min + 1-hour reminders
 
 ### 🛠️ Admin Journey
 1. **Login** (hardcoded admin or admin role in DB) — exempt from OTP verification

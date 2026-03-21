@@ -5,6 +5,7 @@ import com.wellness.backend.dto.PractitionerCreateDTO;
 import com.wellness.backend.dto.PractitionerUpdateDTO;
 import com.wellness.backend.dto.OnboardingStatusDTO;
 import com.wellness.backend.dto.PractitionerDocumentDTO;
+import com.wellness.backend.enums.PractitionerVerificationStatus;
 import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.model.PractitionerDocument;
 import com.wellness.backend.model.User;
@@ -108,6 +109,9 @@ public class PractitionerService {
             if (createDTO.getExperience() != null) {
                 profile.setExperience(createDTO.getExperience());
             }
+            if (createDTO.getConsultationFee() != null) {
+                profile.setConsultationFee(createDTO.getConsultationFee());
+            }
             return mapToDTO(practitionerRepository.save(profile));
         }
 
@@ -116,9 +120,9 @@ public class PractitionerService {
         profile.setSpecialization(createDTO.getSpecialization());
         profile.setQualifications(createDTO.getQualifications());
         profile.setExperience(createDTO.getExperience());
+        profile.setConsultationFee(createDTO.getConsultationFee());
         profile.setVerified(false); // Default to unverified
-        profile.setRating(0.0f);
-        profile.setVerificationStatus("PENDING_VERIFICATION");
+        profile.setVerificationStatus(PractitionerVerificationStatus.PENDING_VERIFICATION);
 
         return mapToDTO(practitionerRepository.save(profile));
     }
@@ -152,12 +156,16 @@ public class PractitionerService {
             profile.setExperience(updateDTO.getExperience());
         }
 
+        if (updateDTO.getConsultationFee() != null) {
+            profile.setConsultationFee(updateDTO.getConsultationFee());
+        }
+
         return mapToDTO(practitionerRepository.save(profile));
     }
 
     // ================= VERIFY PRACTITIONER (ADMIN ONLY) =================
     @Transactional
-    public PractitionerProfileDTO verifyPractitioner(Integer id, Boolean verified) {
+    public PractitionerProfileDTO verifyPractitioner(Integer id, Boolean verified, String rejectionReason) {
 
         User currentUser = userService.getCurrentAuthenticatedUser();
 
@@ -170,7 +178,11 @@ public class PractitionerService {
                 .orElseThrow(() -> new RuntimeException("Practitioner not found with id: " + id));
 
         profile.setVerified(verified);
-        profile.setVerificationStatus(Boolean.TRUE.equals(verified) ? "APPROVED" : "REJECTED");
+        profile.setVerificationStatus(Boolean.TRUE.equals(verified) ? PractitionerVerificationStatus.APPROVED : PractitionerVerificationStatus.REJECTED);
+
+        if (Boolean.FALSE.equals(verified) && rejectionReason != null) {
+            profile.setRejectionReason(rejectionReason);
+        }
 
         PractitionerProfile savedProfile = practitionerRepository.save(profile);
 
@@ -182,6 +194,17 @@ public class PractitionerService {
                         profile.getUser().getEmail());
             } catch (Exception e) {
                 logger.error("Verification email failed for practitioner {}: {}",
+                        profile.getUser().getEmail(), e.getMessage());
+            }
+        } else {
+            // Send rejection email with reason
+            try {
+                emailService.sendPractitionerRejectionEmail(
+                        profile.getUser().getName(),
+                        profile.getUser().getEmail(),
+                        rejectionReason != null ? rejectionReason : "No specific reason provided");
+            } catch (Exception e) {
+                logger.error("Rejection email failed for practitioner {}: {}",
                         profile.getUser().getEmail(), e.getMessage());
             }
         }
@@ -381,6 +404,8 @@ public class PractitionerService {
         dto.setQualifications(profile.getQualifications());
         dto.setExperience(profile.getExperience());
         dto.setVerificationStatus(profile.getVerificationStatus());
+        dto.setConsultationFee(profile.getConsultationFee());
+        dto.setRejectionReason(profile.getRejectionReason());
         dto.setCreatedAt(profile.getCreatedAt());
 
         return dto;

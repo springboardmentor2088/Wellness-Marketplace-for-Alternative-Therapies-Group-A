@@ -100,7 +100,13 @@ CREATE TABLE orders (
   user_id INT NOT NULL,
   total_amount DECIMAL(10,2) NOT NULL,
   order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-  status ENUM('placed','shipped','delivered','cancelled') DEFAULT 'placed',
+  status ENUM('PLACED','SHIPPED','DELIVERED','CANCELLED') DEFAULT 'PLACED',
+  payment_status ENUM('PENDING','PAID','FAILED','REFUNDED') DEFAULT 'PENDING',
+  delivery_address TEXT,
+  estimated_delivery_date DATETIME,
+  tracking_number VARCHAR(100),
+  courier_partner VARCHAR(100),
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   CONSTRAINT fk_order_user
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -274,6 +280,65 @@ CREATE TABLE practitioner_request (
     FOREIGN KEY (practitioner_id) REFERENCES practitioner_profile(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_request_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+-- 1️⃣3️⃣ USER WALLET
+DROP TABLE IF EXISTS user_wallet;
+CREATE TABLE user_wallet (
+  id INT NOT NULL AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  balance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  version BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY unique_wallet_user (user_id),
+  CONSTRAINT fk_wallet_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 1️⃣4️⃣ WALLET TRANSACTION
+DROP TABLE IF EXISTS wallet_transaction;
+CREATE TABLE wallet_transaction (
+  id INT NOT NULL AUTO_INCREMENT,
+  wallet_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  type ENUM('DEPOSIT','PAYMENT','REFUND','WITHDRAWAL') NOT NULL,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_wallet_trans
+    FOREIGN KEY (wallet_id) REFERENCES user_wallet(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 1️⃣5️⃣ PAYMENT TRANSACTION
+DROP TABLE IF EXISTS payment_transaction;
+CREATE TABLE payment_transaction (
+  id INT NOT NULL AUTO_INCREMENT,
+  session_id INT DEFAULT NULL,
+  order_id INT DEFAULT NULL,
+  user_id INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  currency VARCHAR(10) DEFAULT 'INR',
+  gateway VARCHAR(50),
+  gateway_order_id VARCHAR(100),
+  gateway_payment_id VARCHAR(100),
+  gateway_signature VARCHAR(255),
+  payment_status ENUM('PENDING','SUCCESS','FAILED') DEFAULT 'PENDING',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_payment_session
+    FOREIGN KEY (session_id) REFERENCES therapy_session(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_payment_order
+    FOREIGN KEY (order_id) REFERENCES orders(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_payment_user
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB;

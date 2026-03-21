@@ -1,5 +1,6 @@
 package com.wellness.backend.repository;
 
+import com.wellness.backend.enums.PaymentStatus;
 import com.wellness.backend.model.Order;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,9 @@ import java.util.List;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Integer> {
 
+    // Find all orders globally (admin)
+    List<Order> findAllByOrderByOrderDateDesc();
+
     // Find all orders for a user
     @Query("SELECT o FROM Order o WHERE o.user.id = :userId ORDER BY o.orderDate DESC")
     List<Order> findByUser_IdOrderByOrderDateDesc(@Param("userId") Integer userId);
@@ -20,7 +24,7 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     List<Order> findByStatus(Order.OrderStatus status);
 
     // Find orders by payment status
-    List<Order> findByPaymentStatus(Order.PaymentStatus status);
+    List<Order> findByPaymentStatus(PaymentStatus status);
 
     // Find recent orders for a user
     @Query("SELECT o FROM Order o WHERE o.user.id = :userId ORDER BY o.orderDate DESC LIMIT :limit")

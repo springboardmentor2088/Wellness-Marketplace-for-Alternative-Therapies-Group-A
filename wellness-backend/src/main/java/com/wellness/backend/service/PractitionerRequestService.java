@@ -1,6 +1,8 @@
 package com.wellness.backend.service;
 
 import com.wellness.backend.dto.PractitionerRequestDTO;
+import com.wellness.backend.enums.RequestPriority;
+import com.wellness.backend.enums.RequestStatus;
 import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.model.PractitionerRequest;
 import com.wellness.backend.model.User;
@@ -63,9 +65,9 @@ public class PractitionerRequestService {
     @Transactional(readOnly = true)
     public List<PractitionerRequestDTO> getRequestsByStatus(Integer practitionerId, String status) {
         try {
-            PractitionerRequest.Status statusEnum = PractitionerRequest.Status.valueOf(status.toUpperCase());
+            RequestStatus statusEnum = RequestStatus.valueOf(status.toUpperCase());
             List<PractitionerRequest> requests = requestRepository.findByPractitionerIdAndStatus(
-                    practitionerId, statusEnum.toString());
+                    practitionerId, statusEnum);
             return requests.stream()
                     .map(this::convertToDTO)
                     .collect(Collectors.toList());
@@ -78,9 +80,9 @@ public class PractitionerRequestService {
     @Transactional(readOnly = true)
     public List<PractitionerRequestDTO> getRequestsByPriority(Integer practitionerId, String priority) {
         try {
-            PractitionerRequest.Priority priorityEnum = PractitionerRequest.Priority.valueOf(priority.toUpperCase());
+            RequestPriority priorityEnum = RequestPriority.valueOf(priority.toUpperCase());
             List<PractitionerRequest> requests = requestRepository.findByPractitionerIdAndPriority(
-                    practitionerId, priorityEnum.toString());
+                    practitionerId, priorityEnum);
             return requests.stream()
                     .map(this::convertToDTO)
                     .collect(Collectors.toList());
@@ -111,16 +113,12 @@ public class PractitionerRequestService {
         request.setDescription(requestDTO.getDescription());
         request.setPractitioner(practitioner);
         request.setUser(user);
-        request.setStatus(PractitionerRequest.Status.PENDING);
+        request.setStatus(RequestStatus.PENDING);
 
-        if (requestDTO.getPriority() != null && !requestDTO.getPriority().isEmpty()) {
-            try {
-                request.setPriority(PractitionerRequest.Priority.valueOf(requestDTO.getPriority().toUpperCase()));
-            } catch (IllegalArgumentException e) {
-                request.setPriority(PractitionerRequest.Priority.NORMAL);
-            }
+        if (requestDTO.getPriority() != null) {
+            request.setPriority(requestDTO.getPriority());
         } else {
-            request.setPriority(PractitionerRequest.Priority.NORMAL);
+            request.setPriority(RequestPriority.NORMAL);
         }
 
         PractitionerRequest savedRequest = requestRepository.save(request);
@@ -133,7 +131,7 @@ public class PractitionerRequestService {
         PractitionerRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found with id: " + requestId));
 
-        request.setStatus(PractitionerRequest.Status.ACCEPTED);
+        request.setStatus(RequestStatus.ACCEPTED);
         PractitionerRequest updatedRequest = requestRepository.save(request);
         return convertToDTO(updatedRequest);
     }
@@ -144,7 +142,7 @@ public class PractitionerRequestService {
         PractitionerRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found with id: " + requestId));
 
-        request.setStatus(PractitionerRequest.Status.REJECTED);
+        request.setStatus(RequestStatus.REJECTED);
         if (reason != null && !reason.isEmpty()) {
             request.setDescription(request.getDescription() + " [Rejection Reason: " + reason + "]");
         }
@@ -158,7 +156,7 @@ public class PractitionerRequestService {
         PractitionerRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found with id: " + requestId));
 
-        request.setStatus(PractitionerRequest.Status.COMPLETED);
+        request.setStatus(RequestStatus.COMPLETED);
         PractitionerRequest updatedRequest = requestRepository.save(request);
         return convertToDTO(updatedRequest);
     }
@@ -169,7 +167,7 @@ public class PractitionerRequestService {
         PractitionerRequest request = requestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found with id: " + requestId));
 
-        request.setStatus(PractitionerRequest.Status.CANCELLED);
+        request.setStatus(RequestStatus.CANCELLED);
         PractitionerRequest updatedRequest = requestRepository.save(request);
         return convertToDTO(updatedRequest);
     }
@@ -189,8 +187,8 @@ public class PractitionerRequestService {
         PractitionerRequestDTO dto = new PractitionerRequestDTO();
         dto.setId(request.getId());
         dto.setDescription(request.getDescription());
-        dto.setStatus(request.getStatus().toString());
-        dto.setPriority(request.getPriority().toString());
+        dto.setStatus(request.getStatus());
+        dto.setPriority(request.getPriority());
         dto.setCreatedAt(request.getCreatedAt());
         dto.setUpdatedAt(request.getUpdatedAt());
         dto.setRequestedDate(request.getRequestedDate());
