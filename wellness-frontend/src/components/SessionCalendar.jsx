@@ -25,7 +25,19 @@ export default function SessionCalendar({ practitionerId, onSlotSelect }) {
         try {
             const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             const available = await getAvailableSlots(practitionerId, dateStr);
-            setSlots(available);
+            // Filter out past time slots if the selected date is today
+            const now = new Date();
+            const isTodaySelected = date.getFullYear() === now.getFullYear() &&
+                date.getMonth() === now.getMonth() &&
+                date.getDate() === now.getDate();
+            const filtered = isTodaySelected
+                ? available.filter(slot => {
+                    const [h, m] = slot.split(":");
+                    const slotTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(h), parseInt(m));
+                    return slotTime > now;
+                })
+                : available;
+            setSlots(filtered);
         } catch {
             setSlots([]);
         } finally {
@@ -70,49 +82,83 @@ export default function SessionCalendar({ practitionerId, onSlotSelect }) {
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             {/* Month Navigation */}
-            <div className="flex items-center justify-between mb-6">
-                <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                </button>
-                <h3 className="text-lg font-bold text-gray-800">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
+                <h3 className="text-xl font-bold text-gray-800">
                     {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
                 </h3>
-                <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-lg transition">
-                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                </button>
-            </div>
-
-            {/* Day Headers */}
-            <div className="grid grid-cols-7 mb-2">
-                {DAYS_SHORT.map(d => (
-                    <div key={d} className="text-center text-xs font-semibold text-gray-400 py-1">{d}</div>
-                ))}
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7 gap-1">
-                {Array(firstDayOfMonth).fill(null).map((_, i) => <div key={`empty-${i}`} />)}
-                {Array(daysInMonth).fill(null).map((_, i) => {
-                    const day = i + 1;
-                    return (
-                        <button
-                            key={day}
-                            onClick={() => handleDateClick(day)}
-                            disabled={isPast(day)}
-                            className={`h-9 w-9 mx-auto rounded-full text-sm font-medium transition-all
-                ${isPast(day) ? "text-gray-300 cursor-not-allowed" : "hover:bg-teal-50 cursor-pointer"}
-                ${isToday(day) && !isSameDay(day) ? "border-2 border-teal-400 text-teal-700" : ""}
-                ${isSameDay(day) ? "bg-teal-600 text-white shadow-md hover:bg-teal-700" : "text-gray-700"}
-              `}
-                        >
-                            {day}
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => {
+                            setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+                            setSelectedDate(null);
+                        }} 
+                        className="px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg transition"
+                    >
+                        Today
+                    </button>
+                    <div className="flex items-center bg-gray-50 rounded-lg border border-gray-100 p-0.5">
+                        <button onClick={prevMonth} className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
                         </button>
-                    );
-                })}
+                        <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                        <button onClick={nextMonth} className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Calendar Grid Container */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+                {/* Day Headers */}
+                <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+                    {DAYS_SHORT.map(d => (
+                        <div key={d} className="text-center text-xs font-semibold text-gray-500 py-3 uppercase tracking-wider">{d}</div>
+                    ))}
+                </div>
+
+                {/* Calendar Cells */}
+                <div className="grid grid-cols-7 bg-gray-200 gap-px">
+                    {/* Empty Slots */}
+                    {Array(firstDayOfMonth).fill(null).map((_, i) => <div key={`empty-${i}`} className="bg-gray-50/50 min-h-[80px]" />)}
+                    
+                    {/* Days */}
+                    {Array(daysInMonth).fill(null).map((_, i) => {
+                        const day = i + 1;
+                        const isSelected = isSameDay(day);
+                        const isCurrentDay = isToday(day);
+                        const past = isPast(day);
+                        
+                        return (
+                            <div 
+                                key={day}
+                                onClick={() => !past && handleDateClick(day)}
+                                className={`min-h-[80px] bg-white p-2 transition-all relative group flex flex-col items-end
+                                    ${past ? "cursor-not-allowed bg-gray-50/50" : "cursor-pointer hover:bg-teal-50/30"}
+                                    ${isSelected ? "ring-2 ring-inset ring-teal-500 z-10" : ""}
+                                `}
+                            >
+                                <span className={`
+                                    inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium
+                                    ${isCurrentDay && !isSelected ? "bg-teal-100 text-teal-700" : ""}
+                                    ${isSelected ? "bg-teal-600 text-white" : ""}
+                                    ${past && !isCurrentDay && !isSelected ? "text-gray-400" : "text-gray-700"}
+                                `}>
+                                    {day}
+                                </span>
+                            </div>
+                        );
+                    })}
+
+                    {/* Filling the rest of the grid */}
+                    {Array((7 - ((firstDayOfMonth + daysInMonth) % 7)) % 7).fill(null).map((_, i) => (
+                        <div key={`end-empty-${i}`} className="bg-gray-50/50 min-h-[80px]" />
+                    ))}
+                </div>
             </div>
 
             {/* Time Slots */}

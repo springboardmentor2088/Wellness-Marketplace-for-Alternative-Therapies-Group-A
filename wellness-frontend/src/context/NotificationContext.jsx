@@ -85,15 +85,21 @@ export const NotificationProvider = ({ children }) => {
 
         // Show toast
         const textMessage = message.message || "New notification!";
-        toast(textMessage, {
-            icon: '🔔',
-            duration: 5000,
-            style: {
-                borderRadius: '10px',
-                background: '#333',
-                color: '#fff',
-            },
-        });
+        // Suppress toast for PLACED orders as it overlaps with the payment modal
+        if (!textMessage.includes("is now PLACED")) {
+            toast(textMessage, {
+                icon: '🔔',
+                duration: 5000,
+                style: {
+                    borderRadius: '10px',
+                    background: '#333',
+                    color: '#fff',
+                },
+            });
+        }
+
+        // Emit global event
+        window.dispatchEvent(new CustomEvent('wsNotification', { detail: message }));
     }, []);
 
     useEffect(() => {

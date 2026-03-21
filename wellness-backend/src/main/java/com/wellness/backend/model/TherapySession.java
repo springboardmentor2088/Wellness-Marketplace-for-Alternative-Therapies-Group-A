@@ -1,5 +1,8 @@
 package com.wellness.backend.model;
 
+import com.wellness.backend.enums.PaymentStatus;
+import com.wellness.backend.enums.SessionStatus;
+import com.wellness.backend.enums.SessionType;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -10,21 +13,10 @@ import java.time.LocalTime;
         @Index(name = "idx_start_time", columnList = "startTime"),
         @Index(name = "idx_status", columnList = "status"),
         @Index(name = "idx_reminder_sent", columnList = "reminderSent"),
-        @Index(name = "idx_user_id", columnList = "user_id")
+        @Index(name = "idx_user_id", columnList = "user_id"),
+        @Index(name = "idx_practitioner_id", columnList = "practitioner_id")
 })
 public class TherapySession {
-
-    public enum Status {
-        BOOKED, COMPLETED, CANCELLED, RESCHEDULED
-    }
-
-    public enum SessionType {
-        ONLINE, OFFLINE
-    }
-
-    public enum PaymentStatus {
-        PENDING, PAID, REFUNDED
-    }
 
     public enum CancelledBy {
         USER, PRACTITIONER, ADMIN
@@ -54,6 +46,9 @@ public class TherapySession {
     @Column(nullable = false)
     private Integer duration; // in minutes
 
+    @Column(nullable = false, precision = 10, scale = 2)
+    private java.math.BigDecimal feeAmount = java.math.BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private SessionType sessionType = SessionType.ONLINE;
@@ -62,7 +57,7 @@ public class TherapySession {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Status status = Status.BOOKED;
+    private SessionStatus status = SessionStatus.BOOKED;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -82,6 +77,9 @@ public class TherapySession {
 
     @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
     private Boolean oneHourReminderSent = false;
+
+    @Column(length = 1000)
+    private String prescribedDocumentUrl;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -154,6 +152,14 @@ public class TherapySession {
         this.duration = duration;
     }
 
+    public java.math.BigDecimal getFeeAmount() {
+        return feeAmount;
+    }
+
+    public void setFeeAmount(java.math.BigDecimal feeAmount) {
+        this.feeAmount = feeAmount;
+    }
+
     public SessionType getSessionType() {
         return sessionType;
     }
@@ -170,11 +176,11 @@ public class TherapySession {
         this.meetingLink = meetingLink;
     }
 
-    public Status getStatus() {
+    public SessionStatus getStatus() {
         return status;
     }
 
-    public void setStatus(Status status) {
+    public void setStatus(SessionStatus status) {
         this.status = status;
     }
 
@@ -240,5 +246,22 @@ public class TherapySession {
 
     public void setOneHourReminderSent(Boolean oneHourReminderSent) {
         this.oneHourReminderSent = oneHourReminderSent;
+    }
+
+    public String getPrescribedDocumentUrl() {
+        return prescribedDocumentUrl;
+    }
+
+    public void setPrescribedDocumentUrl(String prescribedDocumentUrl) {
+        this.prescribedDocumentUrl = prescribedDocumentUrl;
+    }
+
+    // Aliases for service compatibility
+    public String getPrescriptionPath() {
+        return prescribedDocumentUrl;
+    }
+
+    public void setPrescriptionPath(String prescriptionPath) {
+        this.prescribedDocumentUrl = prescriptionPath;
     }
 }

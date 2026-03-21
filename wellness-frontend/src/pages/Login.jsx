@@ -151,10 +151,12 @@ export default function Login() {
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-gray-600 mb-2">
+              <label htmlFor="identifier" className="block text-sm font-semibold text-gray-600 mb-2">
                 Email or Phone Number
               </label>
               <input
+                id="identifier"
+                name="identifier"
                 type="text"
                 placeholder="example@email.com or +91 9876543210"
                 value={credentials.identifier}
@@ -165,10 +167,12 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-600 mb-2">
+              <label htmlFor="password" className="block text-sm font-semibold text-gray-600 mb-2">
                 Password
               </label>
               <input
+                id="password"
+                name="password"
                 type="password"
                 placeholder="Enter your password"
                 value={credentials.password}
@@ -179,8 +183,8 @@ export default function Login() {
             </div>
 
             <div className="flex justify-between items-center text-sm">
-              <label className="flex items-center gap-2 text-gray-600">
-                <input type="checkbox" />
+              <label htmlFor="rememberMe" className="flex items-center gap-2 text-gray-600">
+                <input id="rememberMe" name="rememberMe" type="checkbox" />
                 Remember me
               </label>
               <Link

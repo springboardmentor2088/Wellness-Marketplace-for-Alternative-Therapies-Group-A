@@ -60,20 +60,27 @@ public class SecurityConfig {
                 .headers(headers -> headers.frameOptions(frame -> frame.disable()))
                 .authorizeHttpRequests(auth -> auth
                         // 1. PUBLIC ENDPOINTS
-                        .requestMatchers("/", "/api/auth/**", "/h2-console/**", "/ws/**").permitAll()
+                        .requestMatchers("/", "/api/auth/**", "/h2-console/**", "/ws/**", "/ws-chat/**", "/api/payments/webhook", "/error")
+                        .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/practitioners", "/api/practitioners/verified",
                                 "/api/practitioners/{id}")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/availability/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/product-reviews/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/forum/threads/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/forum/answers/**").permitAll()
 
                         // 2. AVAILABILITY - POST/PUT requires PRACTITIONER (must be before generic
                         // rules)
                         .requestMatchers(HttpMethod.POST, "/api/availability/**").hasAnyRole("PRACTITIONER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/availability/**").hasAnyRole("PRACTITIONER", "ADMIN")
 
-                        // 3. SESSIONS - authenticated users can access
+                        // 3. SESSIONS, WALLET, PAYMENTS - authenticated users can access
                         .requestMatchers("/api/sessions/**").authenticated()
                         .requestMatchers("/api/notifications/**").authenticated()
+                        .requestMatchers("/api/wallet/**").authenticated()
+                        .requestMatchers("/api/payments/initiate").authenticated()
 
                         // 4. ONBOARDING & PROFILE CREATION (Must be authenticated)
                         .requestMatchers(HttpMethod.POST, "/api/practitioners").authenticated()

@@ -117,7 +117,8 @@ public class SessionNotificationService {
                                 data);
         }
 
-        public void notifySessionCancelled(Integer userId, Integer practitionerId, String reason) {
+        public void notifySessionCancelled(Integer userId, String userName, String userEmail, Integer practitionerId,
+                        String practitionerName, String reason, String cancelledByRole) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("eventType", "SESSION_CANCELLED");
                 data.put("reason", reason);
@@ -129,6 +130,15 @@ public class SessionNotificationService {
                 sendNotificationToPractitioner(practitionerId, NotificationType.SESSION_CANCELLED,
                                 "Session has been cancelled",
                                 data);
+
+                if ("PRACTITIONER".equalsIgnoreCase(cancelledByRole)) {
+                        try {
+                                emailService.sendSessionCancellationEmail(userName, userEmail, practitionerName,
+                                                reason);
+                        } catch (Exception e) {
+                                // ignore if email fails
+                        }
+                }
         }
 
         public void notifySessionRescheduled(Integer userId, Integer practitionerId, LocalDateTime newDateTime) {
@@ -183,12 +193,30 @@ public class SessionNotificationService {
                                 data);
         }
 
+        public void notifySessionAccepted(Integer userId, String practitionerName,
+                        java.time.LocalDate sessionDate, java.time.LocalTime startTime) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("eventType", "SESSION_ACCEPTED");
+                data.put("practitionerName", practitionerName);
+                data.put("sessionDate", sessionDate.toString());
+                data.put("startTime", startTime.toString());
+
+                sendNotification(userId, NotificationType.SESSION_BOOKED,
+                                "Your session with " + practitionerName + " on " + sessionDate
+                                                + " at " + startTime + " has been accepted!",
+                                data);
+        }
+
         public void notifySessionCompleted(Integer userId, Integer practitionerId) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("eventType", "SESSION_COMPLETED");
 
                 sendNotification(userId, NotificationType.SESSION_COMPLETED,
                                 "Your session has been completed. Please leave a review!",
+                                data);
+
+                sendNotificationToPractitioner(practitionerId, NotificationType.SESSION_COMPLETED,
+                                "A session has been marked as completed.",
                                 data);
         }
 
@@ -202,14 +230,29 @@ public class SessionNotificationService {
                                 data);
         }
 
+        public void notifyRefundProcessed(Integer userId, java.math.BigDecimal amount) {
+                Map<String, Object> data = new HashMap<>();
+                data.put("eventType", "REFUND_PROCESSED");
+                data.put("amount", amount.toString());
+
+                sendNotification(userId, NotificationType.GENERAL,
+                                "Refund of ₹" + amount + " has been processed to your wallet.",
+                                data);
+        }
+
         public void notifyOrderStatusChanged(Integer userId, String orderId, String newStatus) {
                 Map<String, Object> data = new HashMap<>();
                 data.put("eventType", "ORDER_STATUS_CHANGED");
                 data.put("orderId", orderId);
                 data.put("newStatus", newStatus);
 
+                String message = "Your order " + orderId + " is now " + newStatus;
+                // if ("PLACED".equalsIgnoreCase(newStatus)) {
+                //     message = "Your order " + orderId + " has been PLACED";
+                // }
+
                 sendNotification(userId, NotificationType.ORDER_STATUS_CHANGED,
-                                "Your order #" + orderId + " status has been updated to " + newStatus,
+                                message,
                                 data);
         }
 

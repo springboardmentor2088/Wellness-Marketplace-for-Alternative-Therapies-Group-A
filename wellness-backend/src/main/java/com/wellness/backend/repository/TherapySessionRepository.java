@@ -1,5 +1,6 @@
 package com.wellness.backend.repository;
 
+import com.wellness.backend.enums.SessionStatus;
 import com.wellness.backend.model.TherapySession;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -14,6 +15,10 @@ import java.util.Optional;
 @Repository
 public interface TherapySessionRepository extends JpaRepository<TherapySession, Integer> {
 
+        List<TherapySession> findAllByOrderBySessionDateDescStartTimeDesc();
+
+        List<TherapySession> findByStatusAndCreatedAtBefore(SessionStatus status,
+                        java.time.LocalDateTime createdAt);
         List<TherapySession> findByUser_IdOrderBySessionDateAscStartTimeAsc(Integer userId);
 
         List<TherapySession> findByPractitioner_IdOrderBySessionDateAscStartTimeAsc(Integer practitionerId);
@@ -28,7 +33,7 @@ public interface TherapySessionRepository extends JpaRepository<TherapySession, 
         @Query("SELECT COUNT(s) > 0 FROM TherapySession s " +
                         "WHERE s.practitioner.id = :practitionerId " +
                         "AND s.sessionDate = :sessionDate " +
-                        "AND s.status NOT IN ('CANCELLED', 'RESCHEDULED') " +
+                        "AND s.status != 'CANCELLED' " +
                         "AND s.startTime < :endTime AND s.endTime > :startTime")
         boolean existsOverlappingSession(@Param("practitionerId") Integer practitionerId,
                         @Param("sessionDate") LocalDate sessionDate,
@@ -39,7 +44,7 @@ public interface TherapySessionRepository extends JpaRepository<TherapySession, 
         @Query("SELECT COUNT(s) > 0 FROM TherapySession s " +
                         "WHERE s.user.id = :userId " +
                         "AND s.sessionDate = :sessionDate " +
-                        "AND s.status NOT IN ('CANCELLED', 'RESCHEDULED') " +
+                        "AND s.status != 'CANCELLED' " +
                         "AND s.startTime < :endTime AND s.endTime > :startTime")
         boolean existsUserOverlappingSession(@Param("userId") Integer userId,
                         @Param("sessionDate") LocalDate sessionDate,
@@ -49,7 +54,7 @@ public interface TherapySessionRepository extends JpaRepository<TherapySession, 
         // ================= Active Sessions For Slot Calculation =================
         @Query("SELECT s FROM TherapySession s WHERE s.practitioner.id = :practitionerId " +
                         "AND s.sessionDate = :sessionDate " +
-                        "AND s.status NOT IN ('CANCELLED', 'RESCHEDULED')")
+                        "AND s.status != 'CANCELLED'")
         List<TherapySession> findActiveSessionsByPractitionerAndDate(
                         @Param("practitionerId") Integer practitionerId,
                         @Param("sessionDate") LocalDate sessionDate);
@@ -73,4 +78,13 @@ public interface TherapySessionRepository extends JpaRepository<TherapySession, 
         List<TherapySession> findSessionsForOneHourReminder(
                         @Param("windowStartTime") LocalTime windowStartTime,
                         @Param("windowEndTime") LocalTime windowEndTime);
+
+        // ================= Completed Sessions Without Earnings (Self-Healing) =================
+        @Query("SELECT s FROM TherapySession s WHERE s.practitioner.id = :practitionerId " +
+                        "AND s.status = 'COMPLETED' AND s.paymentStatus = 'PAID' " +
+                        "AND s.id NOT IN (SELECT e.session.id FROM com.wellness.backend.model.DoctorEarning e WHERE e.practitioner.id = :practitionerId)")
+        List<TherapySession> findCompletedSessionsWithoutEarnings(
+                        @Param("practitionerId") Integer practitionerId);
+
+        long countByPractitioner_IdAndStatus(Integer practitionerId, SessionStatus status);
 }

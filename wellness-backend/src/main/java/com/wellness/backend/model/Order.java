@@ -1,5 +1,6 @@
 package com.wellness.backend.model;
 
+import com.wellness.backend.enums.PaymentStatus;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -7,16 +8,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = {
+        @Index(name = "idx_user_id", columnList = "user_id")
+})
 public class Order {
 
     public enum OrderStatus {
         PLACED, SHIPPED, DELIVERED, CANCELLED
     }
 
-    public enum PaymentStatus {
-        PENDING, PAID, FAILED, REFUNDED
-    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,6 +28,15 @@ public class Order {
 
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal subtotal;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal gstAmount;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal deliveryCharge;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -41,6 +50,15 @@ public class Order {
     private LocalDateTime orderDate;
 
     private LocalDateTime updatedAt;
+
+    @Column(columnDefinition = "TEXT")
+    private String deliveryAddress;
+
+    private LocalDateTime estimatedDeliveryDate;
+
+    private String trackingNumber;
+
+    private String courierPartner;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<OrderItem> orderItems = new ArrayList<>();
@@ -113,6 +131,38 @@ public class Order {
         this.updatedAt = updatedAt;
     }
 
+    public String getDeliveryAddress() {
+        return deliveryAddress;
+    }
+
+    public void setDeliveryAddress(String deliveryAddress) {
+        this.deliveryAddress = deliveryAddress;
+    }
+
+    public LocalDateTime getEstimatedDeliveryDate() {
+        return estimatedDeliveryDate;
+    }
+
+    public void setEstimatedDeliveryDate(LocalDateTime estimatedDeliveryDate) {
+        this.estimatedDeliveryDate = estimatedDeliveryDate;
+    }
+
+    public String getTrackingNumber() {
+        return trackingNumber;
+    }
+
+    public void setTrackingNumber(String trackingNumber) {
+        this.trackingNumber = trackingNumber;
+    }
+
+    public String getCourierPartner() {
+        return courierPartner;
+    }
+
+    public void setCourierPartner(String courierPartner) {
+        this.courierPartner = courierPartner;
+    }
+
     public List<OrderItem> getOrderItems() {
         return orderItems;
     }
@@ -129,8 +179,22 @@ public class Order {
 
     // Helper method to calculate total from items
     public void calculateTotal() {
-        this.totalAmount = orderItems.stream()
+        this.subtotal = orderItems.stream()
                 .map(item -> item.getPrice().multiply(new BigDecimal(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (this.deliveryCharge == null) {
+            this.deliveryCharge = BigDecimal.ZERO;
+        }
+        if (this.gstAmount == null) {
+            this.gstAmount = BigDecimal.ZERO;
+        }
+        this.totalAmount = this.subtotal.add(this.deliveryCharge);
     }
+
+    public BigDecimal getSubtotal() { return subtotal; }
+    public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
+    public BigDecimal getGstAmount() { return gstAmount; }
+    public void setGstAmount(BigDecimal gstAmount) { this.gstAmount = gstAmount; }
+    public BigDecimal getDeliveryCharge() { return deliveryCharge; }
+    public void setDeliveryCharge(BigDecimal deliveryCharge) { this.deliveryCharge = deliveryCharge; }
 }

@@ -44,6 +44,12 @@ export const getSessionsForPractitioner = async (practitionerId) => {
     return response.data;
 };
 
+// Get all sessions (Admin)
+export const getAllSessions = async () => {
+    const response = await axios.get(`${API_BASE}/sessions/all`, getAuthHeaders());
+    return response.data;
+};
+
 // Get available time slots for a practitioner on a specific date
 export const getAvailableSlots = async (practitionerId, date) => {
     const response = await axios.get(`${API_BASE}/sessions/${practitionerId}/slots?date=${date}`, getAuthHeaders());
@@ -59,5 +65,28 @@ export const getAvailability = async (practitionerId) => {
 // Set/update practitioner availability for a day
 export const setAvailability = async (practitionerId, data) => {
     const response = await axios.post(`${API_BASE}/availability/${practitionerId}`, data, getAuthHeaders());
+    return response.data;
+};
+// Accept a session (Practitioner only)
+export const acceptSession = async (sessionId, practitionerId) => {
+    const response = await axios.put(`${API_BASE}/sessions/${sessionId}/accept`, { practitionerId }, getAuthHeaders());
+    return response.data;
+};
+
+// Complete a session (Practitioner only)
+export const completeSessionApi = async (sessionId, formData) => {
+    const headers = {
+        Authorization: `Bearer ${getAccessToken()}`,
+    };
+    const response = await axios.put(`${API_BASE}/sessions/${sessionId}/complete`, formData, { headers });
+    return response.data;
+};
+
+// Download a prescribed document
+export const downloadPrescribedDocument = async (sessionId) => {
+    const response = await axios.get(`${API_BASE}/sessions/${sessionId}/document/download`, {
+        ...getAuthHeaders(),
+        responseType: 'blob'
+    });
     return response.data;
 };

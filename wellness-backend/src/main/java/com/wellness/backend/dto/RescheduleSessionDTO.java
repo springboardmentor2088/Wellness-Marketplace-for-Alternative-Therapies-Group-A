@@ -25,6 +25,11 @@ public class RescheduleSessionDTO {
         this.newSessionDate = newSessionDate;
     }
 
+    // Alias for backward compatibility
+    public LocalDate getNewDate() {
+        return newSessionDate;
+    }
+
     public LocalTime getNewStartTime() {
         return newStartTime;
     }

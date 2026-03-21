@@ -125,7 +125,8 @@ export default function PractitionerOnboarding() {
         specialization: formData.specialization,
         qualifications: formData.qualifications,
         experience: `${formData.yearsOfExperience} years`,
-        bio: formData.bio
+        bio: formData.bio,
+        consultationFee: parseFloat(formData.consultationFee) || 0
       };
 
       console.log("Submitting practitioner profile:", practitionerData);

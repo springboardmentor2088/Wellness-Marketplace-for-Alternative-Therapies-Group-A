@@ -2,7 +2,7 @@
 // ORDER SERVICE - Medicine Orders API Integration
 // ============================================
 
-const API_BASE = "http://localhost:8081/api";
+const API_BASE = "/api";
 
 const authHeaders = () => ({
     "Content-Type": "application/json",
@@ -14,9 +14,23 @@ export const getAllProducts = async () => {
     const res = await fetch(`${API_BASE}/products`, {
         headers: authHeaders(),
     });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw { response: { data: { message: errorText || res.statusText } } };
+    }
+    return await res.json();
+};
+
+// ---- Get all orders (Admin) ----
+export const getAllOrders = async () => {
+    const res = await fetch(`${API_BASE}/orders/all`, {
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw { response: { data: { message: errorText || res.statusText } } };
+    }
+    return await res.json();
 };
 
 // ---- Get available products (in stock) ----
@@ -60,20 +74,25 @@ export const getProductById = async (productId) => {
 };
 
 // ---- Create order ----
-export const createOrder = async (items) => {
+export const createOrder = async (items, deliveryAddress) => {
+    const body = { items };
+    if (deliveryAddress) {
+        body.deliveryAddress = deliveryAddress;
+    }
     const res = await fetch(`${API_BASE}/orders`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ items }),
+        body: JSON.stringify(body),
     });
-    const result = await res.json();
+    const text = await res.text();
+    const result = text ? JSON.parse(text) : { message: "Server returned status " + res.status };
     if (!res.ok) throw { response: { data: result } };
     return result;
 };
 
 // ---- Get order history ----
 export const getOrderHistory = async () => {
-    const res = await fetch(`${API_BASE}/orders/history`, {
+    const res = await fetch(`${API_BASE}/orders/history?t=${Date.now()}`, {
         headers: authHeaders(),
     });
     const result = await res.json();
@@ -86,9 +105,11 @@ export const getOrderById = async (orderId) => {
     const res = await fetch(`${API_BASE}/orders/${orderId}`, {
         headers: authHeaders(),
     });
-    const result = await res.json();
-    if (!res.ok) throw { response: { data: result } };
-    return result;
+    if (!res.ok) {
+        const errorText = await res.text();
+        throw { response: { data: { message: errorText || res.statusText } } };
+    }
+    return await res.json();
 };
 
 // ---- Cancel order ----
@@ -126,69 +147,135 @@ export const updateOrderStatus = async (orderId, status) => {
     return result;
 };
 
-// ---- Cart management in localStorage ----
-export const getCart = () => {
-    const cart = localStorage.getItem("cart");
-    return cart ? JSON.parse(cart) : [];
+// ---- Cart management via API ----
+export const getCart = async () => {
+    const res = await fetch(`${API_BASE}/cart`, {
+        headers: authHeaders(),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
 };
 
-export const saveCart = (items) => {
-    localStorage.setItem("cart", JSON.stringify(items));
-};
-
-export const clearCart = () => {
-    localStorage.removeItem("cart");
-};
-
-export const addToCart = (product, quantity = 1) => {
-    const cart = getCart();
-    const existingItem = cart.find((item) => item.productId === product.id);
-
-    if (existingItem) {
-        existingItem.quantity += quantity;
-    } else {
-        cart.push({
-            productId: product.id,
-            productName: product.name,
-            price: product.price,
-            quantity: quantity,
-            category: product.category,
-        });
+export const clearCart = async () => {
+    const res = await fetch(`${API_BASE}/cart/clear`, {
+        method: "DELETE",
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        try {
+            const result = await res.json();
+            throw { response: { data: result } };
+        } catch(e) { throw e; }
     }
-
-    saveCart(cart);
-    return cart;
 };
 
-export const removeFromCart = (productId) => {
-    const cart = getCart().filter((item) => item.productId !== productId);
-    saveCart(cart);
-    return cart;
+export const addToCart = async (product, quantity = 1) => {
+    const res = await fetch(`${API_BASE}/cart/add`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ productId: product.id, quantity }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
 };
 
-export const updateCartItemQuantity = (productId, quantity) => {
-    const cart = getCart();
-    const item = cart.find((item) => item.productId === productId);
-
-    if (item) {
-        if (quantity <= 0) {
-            return removeFromCart(productId);
-        }
-        item.quantity = quantity;
-        saveCart(cart);
+export const removeFromCart = async (productId) => {
+    const res = await fetch(`${API_BASE}/cart/${productId}/remove`, {
+        method: "DELETE",
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        try {
+            const result = await res.json();
+            throw { response: { data: result } };
+        } catch(e) { throw e; }
     }
-
-    return cart;
 };
 
-export const getCartTotal = () => {
-    const cart = getCart();
-    return cart.reduce((total, item) => {
+export const updateCartItemQuantity = async (productId, quantity) => {
+    if (quantity <= 0) {
+        return removeFromCart(productId);
+    }
+    const res = await fetch(`${API_BASE}/cart/${productId}/update`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ quantity }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
+};
+
+export const getCartTotal = (cartItems) => {
+    return cartItems.reduce((total, item) => {
         return total + item.price * item.quantity;
     }, 0);
 };
 
-export const getCartItemCount = () => {
-    const cart = getCart();
-    return cart.reduce((count, item) => count + item.quantity, 0);
+export const getOrderSummary = async () => {
+    const res = await fetch(`${API_BASE}/orders/summary`, {
+        headers: authHeaders(),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
 };
+
+export const calculateOrderSummary = async (items) => {
+    const res = await fetch(`${API_BASE}/orders/calculate`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ items }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
+};
+
+export const getCartItemCount = async () => {
+    try {
+        const cart = await getCart();
+        return cart.reduce((count, item) => count + item.quantity, 0);
+    } catch (e) {
+        return 0;
+    }
+};
+
+// ---- Admin: Create product ----
+export const createProduct = async (productData) => {
+    const res = await fetch(`${API_BASE}/products`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(productData),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
+};
+
+// ---- Admin: Update product ----
+export const updateProduct = async (productId, productData) => {
+    const res = await fetch(`${API_BASE}/products/${productId}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify(productData),
+    });
+    const result = await res.json();
+    if (!res.ok) throw { response: { data: result } };
+    return result;
+};
+
+// ---- Admin: Delete product ----
+export const deleteProduct = async (productId) => {
+    const res = await fetch(`${API_BASE}/products/${productId}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+    });
+    if (!res.ok) {
+        const result = await res.json();
+        throw { response: { data: result } };
+    }
+};
+

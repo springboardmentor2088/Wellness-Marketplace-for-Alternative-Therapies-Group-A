@@ -35,7 +35,12 @@ public class PractitionerController {
     // ================= GET ALL (PUBLIC) =================
     @GetMapping
     public ResponseEntity<List<PractitionerProfileDTO>> getAllPractitioners() {
-        return ResponseEntity.ok(practitionerService.getAllPractitioners());
+        List<PractitionerProfileDTO> practitioners = practitionerService.getAllPractitioners();
+        practitioners.forEach(p -> {
+            int docCount = practitionerService.getDocumentsForPractitioner(p.getId()).size();
+            System.out.println("DEBUG: Practitioner ID: " + p.getId() + ", Name: " + p.getUserName() + ", Docs: " + docCount);
+        });
+        return ResponseEntity.ok(practitioners);
     }
 
     // ================= GET VERIFIED (PUBLIC) =================
@@ -93,10 +98,11 @@ public class PractitionerController {
     @PutMapping("/{id}/verify")
     public ResponseEntity<PractitionerProfileDTO> verifyPractitioner(
             @PathVariable Integer id,
-            @RequestParam Boolean verified) {
+            @RequestParam Boolean verified,
+            @RequestParam(required = false) String rejectionReason) {
 
         return ResponseEntity.ok(
-                practitionerService.verifyPractitioner(id, verified));
+                practitionerService.verifyPractitioner(id, verified, rejectionReason));
     }
 
     // ================= DELETE PROFILE (ADMIN ONLY) =================

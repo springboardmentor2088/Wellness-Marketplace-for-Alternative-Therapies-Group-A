@@ -74,6 +74,18 @@ public class EmailService {
         sendHtmlEmail(email, subject, htmlContent);
     }
 
+    // ================= PRACTITIONER REJECTION EMAIL =================
+
+    /**
+     * Sends a rejection email when an ADMIN rejects a practitioner application.
+     * Includes the reason for rejection.
+     */
+    public void sendPractitionerRejectionEmail(String name, String email, String reason) {
+        String subject = appName + " — Application Update";
+        String htmlContent = buildPractitionerRejectionTemplate(name, reason);
+        sendHtmlEmail(email, subject, htmlContent);
+    }
+
     // ================= PASSWORD RESET EMAIL =================
 
     /**
@@ -107,6 +119,18 @@ public class EmailService {
         String subject = "Verify your " + appName + " account — OTP";
         String htmlContent = buildOtpEmailTemplate(name, otp);
         sendHtmlEmail(email, subject, htmlContent);
+    }
+
+    // ================= SESSION CANCELLATION EMAIL =================
+
+    /**
+     * Sends an email to the user when a practitioner cancels a session.
+     */
+    public void sendSessionCancellationEmail(String userName, String userEmail, String practitionerName,
+            String reason) {
+        String subject = "Important: Therapy Session Cancelled";
+        String htmlContent = buildSessionCancellationTemplate(userName, practitionerName, reason);
+        sendHtmlEmail(userEmail, subject, htmlContent);
     }
 
     // ================= CORE SEND METHOD =================
@@ -334,6 +358,56 @@ public class EmailService {
                 .formatted(name, appName, loginUrl, appName, supportEmail, supportEmail);
     }
 
+    private String buildPractitionerRejectionTemplate(String name, String reason) {
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                        .header { background: linear-gradient(135deg, #d32f2f, #b71c1c); padding: 30px; text-align: center; }
+                        .header h1 { color: #ffffff; margin: 0; font-size: 26px; }
+                        .body { padding: 30px; color: #333333; line-height: 1.7; }
+                        .body h2 { color: #d32f2f; }
+                        .reason-box { background: #ffebee; border-left: 4px solid #d32f2f; padding: 18px; border-radius: 8px; margin: 20px 0; }
+                        .reason-box p { margin: 0; color: #b71c1c; }
+                        .info { background: #FFF8E1; padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #FFC107; }
+                        .info p { margin: 6px 0; color: #7a5c00; }
+                        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 13px; color: #888888; }
+                        .footer a { color: #d32f2f; text-decoration: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Application Update</h1>
+                        </div>
+                        <div class="body">
+                            <h2>Hello, %s.</h2>
+                            <p>We are sorry to inform you that your practitioner application on <strong>%s</strong> has been reviewed and could not be approved at this time.</p>
+                            <p><strong>Reason for rejection:</strong></p>
+                            <div class="reason-box">
+                                <p>"%s"</p>
+                            </div>
+                            <div class="info">
+                                <p><strong>What can you do?</strong></p>
+                                <p>Please review the reason above and work on addressing the concerns mentioned. You are welcome to update your profile and reapply once you have made the necessary improvements.</p>
+                            </div>
+                            <p>If you believe this decision was made in error or have any questions, please don't hesitate to contact our support team.</p>
+                        </div>
+                        <div class="footer">
+                            <p>&copy; 2026 %s. All rights reserved.</p>
+                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                .formatted(name, appName, reason, appName, supportEmail, supportEmail);
+    }
+
     private String buildPasswordResetTemplate(String name, String resetLink) {
         return """
                 <!DOCTYPE html>
@@ -454,5 +528,54 @@ public class EmailService {
                 </html>
                 """
                 .formatted(name, appName, otp, appName, supportEmail, supportEmail);
+    }
+
+    private String buildSessionCancellationTemplate(String userName, String practitionerName, String reason) {
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                        .header { background: linear-gradient(135deg, #d32f2f, #b71c1c); padding: 30px; text-align: center; }
+                        .header h1 { color: #ffffff; margin: 0; font-size: 26px; }
+                        .body { padding: 30px; color: #333333; line-height: 1.7; }
+                        .body h2 { color: #d32f2f; }
+                        .reason-box { background: #ffebee; border-left: 4px solid #d32f2f; padding: 18px; border-radius: 8px; margin: 20px 0; }
+                        .reason-box p { margin: 0; font-style: italic; color: #b71c1c; }
+                        .info { margin-top: 20px; font-size: 15px; }
+                        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 13px; color: #888888; }
+                        .footer a { color: #d32f2f; text-decoration: none; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Session Cancelled</h1>
+                        </div>
+                        <div class="body">
+                            <h2>Hello, %s.</h2>
+                            <p>We are very sorry to inform you that your upcoming session with practitioner <strong>%s</strong> has been cancelled by the practitioner.</p>
+                            <p><strong>Reason provided:</strong></p>
+                            <div class="reason-box">
+                                <p>"%s"</p>
+                            </div>
+                            <div class="info">
+                                <p>You can easily book another practitioner through our platform at your convenience.</p>
+                                <p><strong>Regarding your payment:</strong> Your payment will be refunded to your wallet/original payment method within <strong>7 business days</strong>.</p>
+                            </div>
+                            <p>We apologize for any inconvenience caused.</p>
+                        </div>
+                        <div class="footer">
+                            <p>&copy; 2026 %s. All rights reserved.</p>
+                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                .formatted(userName, practitionerName, reason, appName, supportEmail, supportEmail);
     }
 }
