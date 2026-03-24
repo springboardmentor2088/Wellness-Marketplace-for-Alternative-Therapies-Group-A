@@ -1,5 +1,7 @@
 package com.wellness.backend.dto;
 
+import com.wellness.backend.enums.RequestPriority;
+import com.wellness.backend.enums.RequestStatus;
 import java.time.LocalDateTime;
 
 public class PractitionerRequestDTO {
@@ -11,8 +13,8 @@ public class PractitionerRequestDTO {
     private String userName;
     private String userEmail;
     private String description;
-    private String status;
-    private String priority;
+    private RequestStatus status;
+    private RequestPriority priority;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime requestedDate;
@@ -23,8 +25,8 @@ public class PractitionerRequestDTO {
 
     public PractitionerRequestDTO(Integer id, Integer practitionerId, String practitionerName,
                                  String practitionerEmail, Integer userId, String userName,
-                                 String userEmail, String description, String status,
-                                 String priority, LocalDateTime createdAt, LocalDateTime updatedAt,
+                                 String userEmail, String description, RequestStatus status,
+                                 RequestPriority priority, LocalDateTime createdAt, LocalDateTime updatedAt,
                                  LocalDateTime requestedDate) {
         this.id = id;
         this.practitionerId = practitionerId;
@@ -106,19 +108,19 @@ public class PractitionerRequestDTO {
         this.description = description;
     }
 
-    public String getStatus() {
+    public RequestStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(RequestStatus status) {
         this.status = status;
     }
 
-    public String getPriority() {
+    public RequestPriority getPriority() {
         return priority;
     }
 
-    public void setPriority(String priority) {
+    public void setPriority(RequestPriority priority) {
         this.priority = priority;
     }
 

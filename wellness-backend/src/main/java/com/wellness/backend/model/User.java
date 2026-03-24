@@ -42,6 +42,9 @@ public class User {
     private String address;
 
     private LocalDateTime createdAt;
+    
+    @Column(name = "reputation_score", columnDefinition = "INT DEFAULT 0")
+    private Integer reputationScore = 0;
 
     @Column(name = "email_verified", columnDefinition = "TINYINT(1) DEFAULT 0")
     private boolean emailVerified = false;
@@ -138,5 +141,13 @@ public class User {
 
     public void setEmailVerified(boolean emailVerified) {
         this.emailVerified = emailVerified;
+    }
+
+    public Integer getReputationScore() {
+        return reputationScore;
+    }
+
+    public void setReputationScore(Integer reputationScore) {
+        this.reputationScore = reputationScore;
     }
 }

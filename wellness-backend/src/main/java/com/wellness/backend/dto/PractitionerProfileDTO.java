@@ -1,5 +1,7 @@
 package com.wellness.backend.dto;
 
+import com.wellness.backend.enums.PractitionerVerificationStatus;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public class PractitionerProfileDTO {
@@ -13,7 +15,9 @@ public class PractitionerProfileDTO {
     private String qualifications;
     private String experience;
     private String bio;
-    private String verificationStatus;
+    private PractitionerVerificationStatus verificationStatus;
+    private BigDecimal consultationFee;
+    private String rejectionReason;
     private LocalDateTime createdAt;
 
     public Integer getId() {
@@ -96,11 +100,11 @@ public class PractitionerProfileDTO {
         this.bio = bio;
     }
 
-    public String getVerificationStatus() {
+    public PractitionerVerificationStatus getVerificationStatus() {
         return verificationStatus;
     }
 
-    public void setVerificationStatus(String verificationStatus) {
+    public void setVerificationStatus(PractitionerVerificationStatus verificationStatus) {
         this.verificationStatus = verificationStatus;
     }
 
@@ -110,5 +114,21 @@ public class PractitionerProfileDTO {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public BigDecimal getConsultationFee() {
+        return consultationFee;
+    }
+
+    public void setConsultationFee(BigDecimal consultationFee) {
+        this.consultationFee = consultationFee;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
     }
 }

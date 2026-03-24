@@ -1,5 +1,9 @@
 package com.wellness.backend.dto;
 
+import com.wellness.backend.enums.PaymentStatus;
+import com.wellness.backend.enums.SessionStatus;
+import com.wellness.backend.enums.SessionType;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -15,14 +19,18 @@ public class TherapySessionDTO {
     private LocalTime endTime;
     private Integer duration;
     private Double price;
-    private String sessionType;
+    private SessionType sessionType;
     private String meetingLink;
-    private String status;
-    private String paymentStatus;
+    private SessionStatus status;
+    private PaymentStatus paymentStatus;
     private String notes;
     private String cancellationReason;
     private String cancelledBy;
+    private BigDecimal feeAmount;
+    private String prescriptionPath;
+    private String prescribedDocumentUrl;
     private LocalDateTime createdAt;
+    private boolean reviewed;
 
     // Getters and Setters
     public Integer getId() {
@@ -105,11 +113,11 @@ public class TherapySessionDTO {
         this.price = price;
     }
 
-    public String getSessionType() {
+    public SessionType getSessionType() {
         return sessionType;
     }
 
-    public void setSessionType(String sessionType) {
+    public void setSessionType(SessionType sessionType) {
         this.sessionType = sessionType;
     }
 
@@ -121,19 +129,19 @@ public class TherapySessionDTO {
         this.meetingLink = meetingLink;
     }
 
-    public String getStatus() {
+    public SessionStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(SessionStatus status) {
         this.status = status;
     }
 
-    public String getPaymentStatus() {
+    public PaymentStatus getPaymentStatus() {
         return paymentStatus;
     }
 
-    public void setPaymentStatus(String paymentStatus) {
+    public void setPaymentStatus(PaymentStatus paymentStatus) {
         this.paymentStatus = paymentStatus;
     }
 
@@ -167,5 +175,37 @@ public class TherapySessionDTO {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public BigDecimal getFeeAmount() {
+        return feeAmount;
+    }
+
+    public void setFeeAmount(BigDecimal feeAmount) {
+        this.feeAmount = feeAmount;
+    }
+
+    public String getPrescriptionPath() {
+        return prescriptionPath;
+    }
+
+    public void setPrescriptionPath(String prescriptionPath) {
+        this.prescriptionPath = prescriptionPath;
+    }
+
+    public String getPrescribedDocumentUrl() {
+        return prescribedDocumentUrl;
+    }
+
+    public void setPrescribedDocumentUrl(String prescribedDocumentUrl) {
+        this.prescribedDocumentUrl = prescribedDocumentUrl;
+    }
+
+    public boolean isReviewed() {
+        return reviewed;
+    }
+
+    public void setReviewed(boolean reviewed) {
+        this.reviewed = reviewed;
     }
 }

@@ -4,6 +4,7 @@ import { getAccessToken } from '../services/authService';
 import { getCurrentUser } from '../services/userService';
 import { getSessionsForUser } from '../services/sessionService';
 import SessionCard from '../components/SessionCard';
+import ReviewForm from '../components/ReviewForm';
 import toast from 'react-hot-toast';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -24,6 +25,7 @@ export default function MyBookings() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
+  const [reviewSession, setReviewSession] = useState(null); // session to review
 
   // Calendar state
   const today = new Date();
@@ -226,6 +228,7 @@ export default function MyBookings() {
                   session={session}
                   role="USER"
                   onRefresh={fetchSessions}
+                  onReview={(s) => setReviewSession(s)}
                 />
               ))}
             </div>
@@ -386,6 +389,20 @@ export default function MyBookings() {
           </div>
         )}
       </div>
+
+      {/* Review Form Modal */}
+      {reviewSession && (
+        <ReviewForm
+          practitionerId={reviewSession.practitionerId}
+          practitionerName={reviewSession.practitionerName || 'Practitioner'}
+          sessionId={reviewSession.id}
+          onSuccess={() => {
+            setReviewSession(null);
+            fetchSessions();
+          }}
+          onClose={() => setReviewSession(null)}
+        />
+      )}
     </div>
   );
 }

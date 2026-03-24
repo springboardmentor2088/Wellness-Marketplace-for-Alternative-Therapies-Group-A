@@ -3,14 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getCurrentUser, updateUser, getVerifiedPractitioners, createAppointmentRequest } from '../services/userService';
 import { getAccessToken } from '../services/authService';
-import { getSessionsForUser } from '../services/sessionService';
+import { getSessionsForUser, downloadPrescribedDocument } from '../services/sessionService';
 import SessionCalendar from '../components/SessionCalendar';
 import BookingForm from '../components/BookingForm';
 import SessionCard from '../components/SessionCard';
 import NotificationDropdown from '../components/NotificationDropdown';
+import WalletWidget from '../components/WalletWidget';
+import WalletPage from './WalletPage';
+import ReviewForm from '../components/ReviewForm';
+import { getWalletBalance, getWalletTransactions, withdrawFunds, depositFunds } from '../services/walletService';
+import { getOrderHistory } from '../services/orderService';
+
+// Helper for parsing structured addresses
+const parseStructuredAddress = (addr) => {
+  const match = (addr || "").match(/House No: (.*?), Area: (.*?), District: (.*?), State: (.*)/);
+  if (match) return { houseNo: match[1], area: match[2], district: match[3], state: match[4] };
+  return { houseNo: '', area: addr || '', district: '', state: '' };
+};
 
 export default function UserDashboard() {
   const navigate = useNavigate();
+  const todayStr = new Date().toISOString().split('T')[0];
   const [activeSection, setActiveSection] = useState('dashboard');
   const [orderFilter, setOrderFilter] = useState('all');
   const [userData, setUserData] = useState({
@@ -25,6 +38,7 @@ export default function UserDashboard() {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(userData);
+  const [userDataLoading, setUserDataLoading] = useState(true);
   const [phoneError, setPhoneError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -35,12 +49,34 @@ export default function UserDashboard() {
   const [sessions, setSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [sessionFilter, setSessionFilter] = useState('all');
+  const [reviewSession, setReviewSession] = useState(null);
+  // Orders state
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  
   const [calendarPractitioner, setCalendarPractitioner] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const _wsRef = useRef(null);
-  // New state for Browse Sessions
+  // Merged state for Find Doctors & Browse Sessions
   const [selectedPractitioner, setSelectedPractitioner] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [specializationFilter, setSpecializationFilter] = useState('All');
+  const SPECIALIZATIONS = ['All', 'Ayurveda', 'Physiotherapy', 'Yoga Therapy', 'Naturopathy', 'Meditation', 'Nutrition'];
+
+  // Calendar View State
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+
+  // Wallet State
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [walletTransactions, setWalletTransactions] = useState([]);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [addAmount, setAddAmount] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -61,7 +97,8 @@ export default function UserDashboard() {
           phone: user.phone || '',
           dateOfBirth: user.dateOfBirth || '',
           address: user.address || '',
-          bio: user.bio || ''
+          bio: user.bio || '',
+          reputationScore: user.reputationScore || 0
         };
 
         setUserData(data);
@@ -72,12 +109,48 @@ export default function UserDashboard() {
         if (err.response?.status === 401 || err.response?.status === 403) {
           navigate('/login');
         }
+      } finally {
+        setUserDataLoading(false);
       }
     };
 
     fetchUserData();
   }, [navigate]);
 
+  const fetchUserDataAndRefresh = async () => {
+    try {
+      if (!userData.id) {
+        setUserDataLoading(true);
+        const data = await getCurrentUser();
+        setUserData({ ...data });
+        setEditData({ ...data });
+      }
+    } catch (err) {
+      console.error('Failed to fetch user data:', err);
+    } finally {
+      setUserDataLoading(false);
+    }
+  };
+
+  const handleDownloadDocument = async (sessionId, practitionerName) => {
+    try {
+      toast.loading("Downloading...", { id: "download" });
+      const blob = await downloadPrescribedDocument(sessionId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Prescription_${practitionerName ? practitionerName.replace(/\s+/g, '_') : 'Doc'}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success("Download complete", { id: "download" });
+    } catch (err) {
+      toast.error("Failed to download document", { id: "download" });
+    }
+  };
+
+  // userDataLoading block moved to the end of component before main return
 
   const fetchSessions = useCallback(async () => {
     if (!userData.id) return;
@@ -92,34 +165,104 @@ export default function UserDashboard() {
       setLoadingSessions(false);
     }
   }, [userData.id]);
+  
+  const fetchPractitioners = useCallback(async () => {
+    setLoadingDoctors(true);
+    try {
+      const data = await getVerifiedPractitioners();
+      setPractitioners(data);
+    } catch (err) {
+      console.error('Error fetching practitioners:', err);
+      // Don't show toast error on every background refresh
+    } finally {
+      setLoadingDoctors(false);
+    }
+  }, []);
 
+  const fetchOrders = useCallback(async () => {
+    if (!userData.id) return;
+
+    setLoadingOrders(true);
+    try {
+      const data = await getOrderHistory();
+      setOrders(data);
+    } catch (err) {
+      console.error('Failed to fetch orders:', err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [userData.id]);
 
   useEffect(() => {
-    if (['sessions', 'my-bookings', 'calendar'].includes(activeSection) && userData.id) {
-      fetchSessions();
-    }
-  }, [activeSection, userData.id, fetchSessions]);
+    let intervalId;
 
+    const loadData = () => {
+      if (['dashboard', 'sessions', 'my-bookings', 'calendar'].includes(activeSection) && userData.id) {
+        fetchSessions();
+        fetchOrders();
+      }
+    };
+
+    loadData();
+
+    // Set up an interval to poll for updates every 10 seconds while on the dashboard
+    if (['dashboard', 'sessions', 'my-bookings', 'calendar'].includes(activeSection) && userData.id) {
+      intervalId = setInterval(loadData, 10000);
+    }
+
+    // Refresh data when the window gains focus (e.g. user switches tabs or comes back from another page)
+    window.addEventListener('focus', loadData);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      window.removeEventListener('focus', loadData);
+    };
+  }, [activeSection, userData.id, fetchSessions, fetchOrders]);
 
   useEffect(() => {
     if (activeSection === 'find-doctors' && practitioners.length === 0) {
-
-      const fetchPractitioners = async () => {
-        setLoadingDoctors(true);
-        try {
-          const data = await getVerifiedPractitioners();
-          setPractitioners(data);
-        } catch (err) {
-          console.error('Error fetching practitioners:', err);
-          toast.error('Failed to load practitioners');
-        } finally {
-          setLoadingDoctors(false);
-        }
-      };
-
       fetchPractitioners();
     }
-  }, [activeSection, practitioners.length]);
+  }, [activeSection, practitioners.length, fetchPractitioners]);
+
+  useEffect(() => {
+    if (activeSection === 'wallet') {
+      const fetchWalletDetails = async () => {
+        setLoadingWallet(true);
+        try {
+          const balanceData = await getWalletBalance();
+          setWalletBalance(balanceData.balance);
+
+          const transactionsData = await getWalletTransactions();
+          setWalletTransactions(transactionsData.content || transactionsData);
+        } catch (err) {
+          console.error('Failed to fetch wallet info', err);
+          toast.error('Failed to load wallet data');
+        } finally {
+          setLoadingWallet(false);
+        }
+      }
+      fetchWalletDetails();
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    const handleWs = (e) => {
+      const msg = e.detail;
+      if (msg && (msg.type === 'PAYMENT_SUCCESS' || msg.type === 'REFUND_PROCESSED' || msg.type === 'SESSION_CANCELLED' || msg.type === 'SESSION_COMPLETED')) {
+        if (['dashboard', 'sessions', 'my-bookings', 'calendar', 'find-doctors'].includes(activeSection)) {
+          fetchSessions();
+          fetchPractitioners();
+        }
+        if (activeSection === 'wallet') {
+          getWalletBalance().then(r => setWalletBalance(r.balance)).catch(console.error);
+          getWalletTransactions().then(r => setWalletTransactions(r.content || r)).catch(console.error);
+        }
+      }
+    };
+    window.addEventListener('wsNotification', handleWs);
+    return () => window.removeEventListener('wsNotification', handleWs);
+  }, [activeSection, fetchSessions]);
 
   const handleBookAppointment = async (practitionerId) => {
     setBookingPractitionerId(practitionerId);
@@ -178,6 +321,23 @@ export default function UserDashboard() {
     }
   };
 
+  const filteredPractitioners = practitioners.filter(p => {
+    const matchSearch = !searchQuery ||
+      (p.userName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.specialization || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchSpec = specializationFilter === 'All' ||
+      (p.specialization || '').toLowerCase().includes(specializationFilter.toLowerCase());
+    return matchSearch && matchSpec;
+  });
+
+  if (userDataLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
@@ -203,6 +363,7 @@ export default function UserDashboard() {
             <span>Dashboard</span>
           </button>
 
+          {/* ===== MERGED: Find Doctors & Browse Sessions ===== */}
           <button
             onClick={() => setActiveSection('find-doctors')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'find-doctors'
@@ -212,18 +373,6 @@ export default function UserDashboard() {
           >
             <span>🔍</span>
             <span>Find Doctors</span>
-          </button>
-
-          {/* ===== NEW: Browse Sessions ===== */}
-          <button
-            onClick={() => setActiveSection('browse-sessions')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'browse-sessions'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>🗓️</span>
-            <span>Browse Sessions</span>
           </button>
 
           <button
@@ -249,6 +398,18 @@ export default function UserDashboard() {
             <span>My Bookings</span>
           </button>
 
+          {/* ===== NEW: Wallet ===== */}
+          <button
+            onClick={() => setActiveSection('wallet')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'wallet'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
+          >
+            <span>💳</span>
+            <span>Wallet & Refunds</span>
+          </button>
+
           {/* ===== NEW: Calendar View ===== */}
           <button
             onClick={() => setActiveSection('calendar')}
@@ -262,14 +423,19 @@ export default function UserDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveSection('orders')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'orders'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
+            onClick={() => navigate('/products')}
+            className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-white/5"
           >
             <span>🛍️</span>
-            <span>Medicine Orders</span>
+            <span>Order Medicine</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/user/orders')}
+            className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-white/5"
+          >
+            <span>📦</span>
+            <span>My Orders</span>
           </button>
 
           <button
@@ -292,6 +458,17 @@ export default function UserDashboard() {
           >
             <span>💬</span>
             <span>Messages</span>
+          </button>
+
+
+
+          {/* ===== NEW: Community Forum ===== */}
+          <button
+            onClick={() => navigate('/community-forum')}
+            className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-white/5"
+          >
+            <span>💬</span>
+            <span>Community Forum</span>
           </button>
 
           <button
@@ -340,6 +517,7 @@ export default function UserDashboard() {
       <div className="ml-64 flex-1 p-8">
         {/* Top Header Bar */}
         <div className="flex justify-end items-center mb-6">
+          <WalletWidget />
           <NotificationDropdown />
         </div>
 
@@ -360,7 +538,7 @@ export default function UserDashboard() {
                   Book Appointment
                 </button>
                 <button
-                  onClick={() => setActiveSection('orders')}
+                  onClick={() => navigate('/products')}
                   className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
                 >
                   <span className="mr-2">🛍️</span>
@@ -373,7 +551,7 @@ export default function UserDashboard() {
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">12</div>
+                    <div className="text-3xl font-bold text-slate-900">{loadingSessions ? '...' : sessions.length}</div>
                     <div className="text-sm text-slate-600 font-medium">Total Sessions</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center text-2xl">
@@ -387,9 +565,9 @@ export default function UserDashboard() {
               </div>
 
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
-                <div className="flex justify-between items-start mb-4">
+                <div onClick={() => navigate('/user/orders')} className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">5</div>
+                    <div className="text-3xl font-bold text-slate-900">{loadingOrders ? '...' : orders.length}</div>
                     <div className="text-sm text-slate-600 font-medium">Medicine Orders</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center text-2xl">
@@ -421,7 +599,15 @@ export default function UserDashboard() {
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">$485</div>
+                    <div className="text-3xl font-bold text-slate-900">
+                      ₹{
+                        loadingSessions || loadingOrders ? '...' : 
+                        (
+                          sessions.filter(s => s.paymentStatus?.toString().toUpperCase().trim() === 'PAID').reduce((sum, s) => sum + Number(s.feeAmount || 0), 0) +
+                          orders.filter(o => o.paymentStatus?.toString().toUpperCase().trim() === 'PAID').reduce((sum, o) => sum + Number(o.totalAmount || 0), 0)
+                        ).toFixed(2)
+                      }
+                    </div>
                     <div className="text-sm text-slate-600 font-medium">Total Spent</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-orange-200 rounded-xl flex items-center justify-center text-2xl">
@@ -433,37 +619,119 @@ export default function UserDashboard() {
                   <span>lifetime</span>
                 </div>
               </div>
+
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-gradient-to-br from-purple-100 to-purple-200 p-6 rounded-xl">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-lg font-semibold text-purple-900">Next Session</h4>
-                  <span className="text-sm text-purple-700 font-medium">In 2 days</span>
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-800 rounded-full flex items-center justify-center text-white font-semibold">
-                    RS
+              {(() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const upcoming = sessions
+                  .filter(s => s.sessionDate >= todayStr && s.status?.toUpperCase() === 'BOOKED')
+                  .sort((a, b) => new Date(`${a.sessionDate}T${a.startTime}`) - new Date(`${b.sessionDate}T${b.startTime}`));
+
+                const past = sessions
+                  .filter(s => (s.sessionDate < todayStr || s.status?.toUpperCase() === 'COMPLETED') && s.status?.toUpperCase() === 'COMPLETED')
+                  .sort((a, b) => new Date(`${b.sessionDate}T${b.startTime}`) - new Date(`${a.sessionDate}T${a.startTime}`));
+
+                const nextSession = upcoming.length > 0 ? upcoming[0] : null;
+                const lastCompleted = past.length > 0 ? past[0] : null;
+
+                return (
+                  <div className="space-y-6">
+                    <div className="bg-gradient-to-br from-purple-100 to-purple-200 p-6 rounded-xl shadow-sm">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-lg font-semibold text-purple-900">Next Session</h4>
+                        {nextSession && (
+                          <span className="text-sm text-purple-700 font-medium whitespace-nowrap">
+                            {nextSession.sessionDate === todayStr ? 'Today' : nextSession.sessionDate}
+                          </span>
+                        )}
+                      </div>
+
+                      {nextSession ? (
+                        <>
+                          <div className="flex items-center gap-4 mb-4">
+                            <div className="w-14 h-14 bg-gradient-to-br from-purple-600 to-purple-800 rounded-full flex items-center justify-center text-white font-semibold text-lg flex-shrink-0 shadow-md">
+                              {(nextSession.practitionerName || 'Dr').split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-base font-bold text-purple-900 truncate">
+                                {nextSession.practitionerName || 'Practitioner Name'}
+                              </h4>
+                              <p className="text-sm text-purple-700 truncate opacity-90">
+                                {nextSession.notes || 'Wellness Consultation'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="pt-4 border-t border-purple-300/50 space-y-3">
+                            <div className="flex items-center gap-3 text-purple-800 text-sm font-medium">
+                              <span className="bg-purple-200/50 p-1.5 rounded-lg">📅</span>
+                              <span>{new Date(`${nextSession.sessionDate}T${nextSession.startTime}`).toLocaleString('en-US', {
+                                month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                              })}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-purple-800 text-sm font-medium">
+                              <span className="bg-purple-200/50 p-1.5 rounded-lg">📍</span>
+                              <span>Video Consultation</span>
+                            </div>
+                          </div>
+                          {(() => {
+                            const sessionStart = new Date(`${nextSession.sessionDate}T${nextSession.startTime}`);
+                            const canJoin = (sessionStart - new Date()) / 60000 <= 15;
+                            return canJoin && nextSession.meetingLink ? (
+                              <a
+                                href={nextSession.meetingLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full mt-5 py-3.5 bg-purple-700 text-white rounded-xl font-bold hover:bg-purple-800 transition-all block text-center shadow-md active:scale-95"
+                              >
+                                Join Session
+                              </a>
+                            ) : (
+                              <div className="w-full mt-5 py-3.5 bg-purple-300 text-purple-100 rounded-xl font-bold text-center cursor-not-allowed border border-purple-200">
+                                Join available 15 min before
+                              </div>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-10 text-purple-800 border-2 border-dashed border-purple-300 rounded-xl">
+                          <div className="text-5xl mb-3 opacity-50">📭</div>
+                          <p className="text-sm font-bold opacity-75 uppercase tracking-wide">No upcoming sessions</p>
+                          <button 
+                            onClick={() => setActiveSection('find-doctors')}
+                            className="mt-4 text-purple-700 font-bold hover:underline"
+                          >
+                            Book now →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {lastCompleted && !lastCompleted.reviewed && (
+                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 p-6 rounded-xl shadow-sm">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-amber-500 rounded-full flex items-center justify-center text-white shadow-sm flex-shrink-0">
+                            ⭐
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-base font-bold text-amber-900">Share your feedback!</h4>
+                            <p className="text-sm text-amber-800 opacity-90">
+                              How was your session with {lastCompleted.practitionerName}?
+                            </p>
+                            <button
+                              onClick={() => setReviewSession(lastCompleted)}
+                              className="mt-3 px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-lg transition-all shadow-md active:scale-95"
+                            >
+                              Leave a Review
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <h4 className="text-base font-semibold text-purple-900">Practitioner Name</h4>
-                    <p className="text-sm text-purple-700">Ayurveda Consultation</p>
-                  </div>
-                </div>
-                <div className="pt-3 border-t border-purple-300/50 space-y-2">
-                  <div className="flex items-center gap-2 text-purple-700 text-sm">
-                    <span>📅</span>
-                    <span>February 15, 2026 at 10:00 AM</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-purple-700 text-sm">
-                    <span>📍</span>
-                    <span>Video Call</span>
-                  </div>
-                </div>
-                <button className="w-full mt-4 py-3 bg-purple-700 text-white rounded-lg font-semibold hover:bg-purple-800 transition-all">
-                  Join Session
-                </button>
-              </div>
+                );
+              })()}
 
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-slate-900 mb-6">Wellness Score Overview</h3>
@@ -499,101 +767,61 @@ export default function UserDashboard() {
           </>
         )}
 
-        {/* Find Doctors Section - UNCHANGED */}
+        {/* ===== MERGED: Find Doctors & Browse Sessions ===== */}
         {activeSection === 'find-doctors' && (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Find Practitioners</h2>
-              <p className="text-slate-600 text-sm mt-2">Search and book appointments with verified practitioners</p>
+              <h2 className="text-3xl font-bold text-slate-900">Find Doctors & Book Sessions</h2>
+              <p className="text-slate-600 text-sm mt-2">Search, filter by specialization, and book appointments with verified practitioners</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="p-6 border-b border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-900">Find & Book Practitioners</h3>
-              </div>
-              <div className="p-6">
-                <div className="flex gap-3 mb-6">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
+              <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                <div className="relative flex-1">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
                   <input
                     type="text"
-                    placeholder="Search by name, specialization, or location..."
-                    className="flex-1 px-4 py-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    placeholder="Search by name or specialization..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 bg-white shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
                   />
-                  <button className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all">
-                    Search
-                  </button>
-                </div>
-
-                <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                  {loadingDoctors ? (
-                    <div className="text-center py-12">
-                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500 mx-auto mb-4"></div>
-                      <p className="text-slate-600">Loading practitioners...</p>
-                    </div>
-                  ) : practitioners.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="text-5xl mb-4">🔍</div>
-                      <h4 className="text-lg font-semibold text-slate-900 mb-2">No practitioners found</h4>
-                      <p className="text-slate-600 text-sm">No verified practitioners are available at the moment</p>
-                    </div>
-                  ) : practitioners.map((doctor) => (
-                    <div key={doctor.id} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:border-green-500 hover:shadow-md transition-all">
-                      <div className="flex gap-4 mb-4">
-                        <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-2xl flex-shrink-0">
-                          {(doctor.userName || 'Dr').split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="text-base font-semibold text-slate-900 mb-1">{doctor.userName || 'Practitioner'}</h4>
-                          <div className="flex gap-2 flex-wrap mb-2">
-                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
-                              {doctor.specialization || 'General'}
-                            </span>
-                          </div>
-                          <div className="flex gap-4 text-sm text-slate-600">
-                            <span className="flex items-center gap-1">⭐ {doctor.rating || 'N/A'}</span>
-                            <span className="flex items-center gap-1">🎓 {doctor.experience || 'N/A'}</span>
-                            {doctor.qualifications && <span className="flex items-center gap-1">📋 {doctor.qualifications}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleBookAppointment(doctor.id)}
-                        disabled={bookingPractitionerId === doctor.id}
-                        className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
-                      >
-                        {bookingPractitionerId === doctor.id ? 'Sending Request...' : 'Book Appointment'}
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
-            </div>
-          </>
-        )}
 
-        {/* ===== NEW: Browse Sessions Section ===== */}
-        {activeSection === 'browse-sessions' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Browse Available Sessions</h2>
-              <p className="text-slate-600 text-sm mt-2">View practitioner calendars and book available time slots</p>
+              {/* Specialization Filter */}
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {SPECIALIZATIONS.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setSpecializationFilter(s)}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${specializationFilter === s
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:border-green-300 hover:text-green-700'
+                      }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Practitioners List */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Select Practitioner</h3>
-                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                   {loadingDoctors ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
                       <p className="text-sm text-slate-600">Loading...</p>
                     </div>
-                  ) : practitioners.length === 0 ? (
+                  ) : filteredPractitioners.length === 0 ? (
                     <div className="text-center py-8">
                       <div className="text-4xl mb-2">👨‍⚕️</div>
-                      <p className="text-sm text-slate-600">No practitioners available</p>
+                      <p className="text-sm text-slate-600">No practitioners found</p>
                     </div>
-                  ) : practitioners.map((pract) => (
+                  ) : filteredPractitioners.map((pract) => (
                     <div
                       key={pract.id}
                       onClick={() => setSelectedPractitioner(pract)}
@@ -603,7 +831,7 @@ export default function UserDashboard() {
                         }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
                           {(pract.userName || 'Dr').split(' ').map(n => n[0]).join('')}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -655,6 +883,7 @@ export default function UserDashboard() {
               <BookingForm
                 practitionerId={calendarPractitioner.id}
                 practitionerName={calendarPractitioner.userName}
+                consultationFee={calendarPractitioner.consultationFee}
                 selectedSlot={selectedSlot}
                 onSuccess={() => {
                   fetchSessions();
@@ -673,19 +902,12 @@ export default function UserDashboard() {
         {/* My Sessions Section - UNCHANGED */}
         {activeSection === 'sessions' && (
           <>
-            <div className="mb-8 flex justify-between items-center">
+            <div className="mb-8">
               <div>
                 <h2 className="text-3xl font-bold text-slate-900">My Sessions</h2>
                 <p className="text-slate-600 text-sm mt-2">View and manage your therapy sessions</p>
               </div>
-              <button
-                onClick={() => setActiveSection('browse-sessions')}
-                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
-              >
-                📅 Book New Session
-              </button>
             </div>
-
             <div className="flex gap-2 mb-6">
               {['all', 'upcoming', 'past', 'cancelled'].map((f) => (
                 <button
@@ -706,11 +928,11 @@ export default function UserDashboard() {
                 <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (() => {
-              const today = new Date().toISOString().split('T')[0];
               const filtered = sessions.filter(s => {
-                if (sessionFilter === 'upcoming') return s.sessionDate >= today && s.status === 'BOOKED';
-                if (sessionFilter === 'past') return s.sessionDate < today || s.status === 'COMPLETED';
-                if (sessionFilter === 'cancelled') return s.status === 'CANCELLED' || s.status === 'RESCHEDULED';
+                const status = s.status?.toUpperCase();
+                if (sessionFilter === 'upcoming') return s.sessionDate >= todayStr && status === 'BOOKED';
+                if (sessionFilter === 'past') return s.sessionDate < todayStr || status === 'COMPLETED';
+                if (sessionFilter === 'cancelled') return status === 'CANCELLED' || status === 'RESCHEDULED';
                 return true;
               });
               return filtered.length === 0 ? (
@@ -727,6 +949,7 @@ export default function UserDashboard() {
                       session={session}
                       role="USER"
                       onRefresh={fetchSessions}
+                      onReview={(s) => setReviewSession(s)}
                     />
                   ))}
                 </div>
@@ -751,19 +974,19 @@ export default function UserDashboard() {
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="text-xs font-semibold text-slate-600 uppercase mb-2">Confirmed</h3>
                 <p className="text-3xl font-bold text-green-600">
-                  {sessions.filter(s => s.status === 'BOOKED').length}
+                  {sessions.filter(s => s.status?.toUpperCase() === 'BOOKED').length}
                 </p>
               </div>
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="text-xs font-semibold text-slate-600 uppercase mb-2">Completed</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {sessions.filter(s => s.status === 'COMPLETED').length}
+                  {sessions.filter(s => s.status?.toUpperCase() === 'COMPLETED').length}
                 </p>
               </div>
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="text-xs font-semibold text-slate-600 uppercase mb-2">Cancelled</h3>
                 <p className="text-3xl font-bold text-red-600">
-                  {sessions.filter(s => s.status === 'CANCELLED').length}
+                  {sessions.filter(s => s.status?.toUpperCase() === 'CANCELLED').length}
                 </p>
               </div>
             </div>
@@ -815,16 +1038,24 @@ export default function UserDashboard() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${booking.status === 'BOOKED' ? 'bg-green-100 text-green-800' :
-                          booking.status === 'COMPLETED' ? 'bg-blue-100 text-blue-800' :
-                            booking.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${booking.status?.toUpperCase() === 'BOOKED' ? 'bg-green-100 text-green-800' :
+                          booking.status?.toUpperCase() === 'COMPLETED' ? 'bg-blue-100 text-blue-800' :
+                            booking.status?.toUpperCase() === 'CANCELLED' ? 'bg-red-100 text-red-800' :
                               'bg-yellow-100 text-yellow-800'
                           }`}>
                           {booking.status}
                         </span>
                         <p className="text-sm font-bold text-slate-900 mt-2">
-                          ${booking.price || '75'}
+                          ₹{booking.feeAmount != null ? Number(booking.feeAmount).toFixed(2) : '0.00'}
                         </p>
+                        {booking.status?.toUpperCase() === 'COMPLETED' && !booking.reviewed && (
+                          <button
+                            onClick={() => setReviewSession(booking)}
+                            className="mt-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-all shadow-sm"
+                          >
+                            ⭐ Leave Review
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -835,7 +1066,33 @@ export default function UserDashboard() {
         )}
 
         {/* ===== NEW: Calendar View Section ===== */}
-        {activeSection === 'calendar' && (
+        {activeSection === 'calendar' && (() => {
+          const todayDate = new Date();
+          const calMonth = calendarMonth ?? todayDate.getMonth();
+          const calYear = calendarYear ?? todayDate.getFullYear();
+          const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+          const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay();
+          const prevMonthDays = new Date(calYear, calMonth, 0).getDate();
+          const totalCells = firstDayOfWeek + daysInMonth;
+          const totalRows = Math.ceil(totalCells / 7);
+          const gridCells = totalRows * 7;
+          const monthLabel = new Date(calYear, calMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+          const isCurrentMonth = calMonth === todayDate.getMonth() && calYear === todayDate.getFullYear();
+          const bookedCount = sessions.filter(s => {
+            if (s.status !== 'BOOKED' || !s.sessionDate) return false;
+            const d = new Date(s.sessionDate);
+            return d.getMonth() === calMonth && d.getFullYear() === calYear;
+          }).length;
+
+          const formatSlotTime = (t) => {
+            if (!t) return '';
+            const [h, m] = t.split(':');
+            const hour = parseInt(h);
+            return `${hour > 12 ? hour - 12 : hour || 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
+          };
+
+          return (
           <>
             <div className="mb-8">
               <h2 className="text-3xl font-bold text-slate-900">Calendar View</h2>
@@ -843,24 +1100,47 @@ export default function UserDashboard() {
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-              <div className="mb-6 flex justify-between items-center">
+              <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                  </h3>
+                  <h3 className="text-xl font-bold text-slate-900">{monthLabel}</h3>
                   <p className="text-sm text-slate-600 mt-1">
-                    {sessions.filter(s => s.status === 'BOOKED').length} upcoming sessions
+                    {bookedCount} session{bookedCount !== 1 ? 's' : ''} this month
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-all">
-                    ← Previous
-                  </button>
-                  <button className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-all">
-                    Next →
-                  </button>
+                <div className="flex items-center gap-2">
+                  {!isCurrentMonth && (
+                    <button
+                      onClick={() => { setCalendarMonth(todayDate.getMonth()); setCalendarYear(todayDate.getFullYear()); }}
+                      className="px-3 py-1.5 text-sm font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-lg transition"
+                    >
+                      Today
+                    </button>
+                  )}
+                  <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
+                    <button
+                      onClick={() => {
+                        const prev = new Date(calYear, calMonth - 1, 1);
+                        setCalendarMonth(prev.getMonth());
+                        setCalendarYear(prev.getFullYear());
+                      }}
+                      className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-1"></div>
+                    <button
+                      onClick={() => {
+                        const next = new Date(calYear, calMonth + 1, 1);
+                        setCalendarMonth(next.getMonth());
+                        setCalendarYear(next.getFullYear());
+                      }}
+                      className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition text-gray-600"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setActiveSection('browse-sessions')}
+                    onClick={() => setActiveSection('find-doctors')}
                     className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold hover:bg-green-600 transition-all"
                   >
                     + Book Session
@@ -869,59 +1149,111 @@ export default function UserDashboard() {
               </div>
 
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
                 {/* Day Headers */}
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                  <div key={day} className="text-center font-semibold text-slate-700 text-sm py-2">
-                    {day}
-                  </div>
-                ))}
-
-                {/* Calendar Days */}
-                {Array.from({ length: 35 }, (_, i) => {
-                  const today = new Date();
-                  const dayDate = new Date(today.getFullYear(), today.getMonth(), i - today.getDay() + 1);
-                  const dayNum = dayDate.getDate();
-                  const isToday = dayDate.toDateString() === today.toDateString();
-                  const hasSession = sessions.some(s =>
-                    s.sessionDate && new Date(s.sessionDate).toDateString() === dayDate.toDateString()
-                  );
-
-                  return (
-                    <div
-                      key={i}
-                      className={`aspect-square border rounded-lg p-2 transition-all ${isToday ? 'border-green-500 bg-green-50' :
-                        hasSession ? 'border-blue-300 bg-blue-50' :
-                          'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                        } cursor-pointer`}
-                    >
-                      <div className="text-right">
-                        <span className={`text-sm font-medium ${isToday ? 'text-green-700' : 'text-slate-700'
-                          }`}>
-                          {dayNum}
-                        </span>
-                      </div>
-                      {hasSession && (
-                        <div className="mt-1">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full mx-auto"></div>
-                        </div>
-                      )}
+                <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="text-center font-semibold text-slate-500 text-xs py-3 uppercase tracking-wider">
+                      {day}
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+
+                {/* Calendar Cells */}
+                <div className="grid grid-cols-7 bg-gray-200 gap-px">
+                  {Array.from({ length: gridCells }, (_, i) => {
+                    let dayNum, isCurrentMonthDay;
+                    if (i < firstDayOfWeek) {
+                      // Previous month
+                      dayNum = prevMonthDays - firstDayOfWeek + i + 1;
+                      isCurrentMonthDay = false;
+                    } else if (i >= firstDayOfWeek + daysInMonth) {
+                      // Next month
+                      dayNum = i - firstDayOfWeek - daysInMonth + 1;
+                      isCurrentMonthDay = false;
+                    } else {
+                      dayNum = i - firstDayOfWeek + 1;
+                      isCurrentMonthDay = true;
+                    }
+
+                    const cellDate = isCurrentMonthDay
+                      ? new Date(calYear, calMonth, dayNum)
+                      : (i < firstDayOfWeek ? new Date(calYear, calMonth - 1, dayNum) : new Date(calYear, calMonth + 1, dayNum));
+                    const cellDateStr = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`;
+                    const isToday = cellDate.toDateString() === todayDate.toDateString();
+                    const isPast = isCurrentMonthDay && cellDate < new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
+                    const daySessions = sessions.filter(s => s.sessionDate === cellDateStr);
+
+                    return (
+                      <div
+                        key={i}
+                        className={`min-h-[90px] p-2 transition-all flex flex-col
+                          ${!isCurrentMonthDay ? 'bg-gray-50/70' : isToday ? 'bg-green-50/60' : isPast ? 'bg-white/80' : 'bg-white'}
+                          ${isToday ? 'ring-2 ring-inset ring-green-400 z-10' : ''}
+                        `}
+                      >
+                        {/* Day Number */}
+                        <div className="flex justify-end mb-1">
+                          <span className={`
+                            inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-semibold
+                            ${!isCurrentMonthDay ? 'text-gray-400' : ''}
+                            ${isCurrentMonthDay && isToday ? 'bg-green-600 text-white' : ''}
+                            ${isCurrentMonthDay && !isToday && isPast ? 'text-gray-400' : ''}
+                            ${isCurrentMonthDay && !isToday && !isPast ? 'text-slate-700' : ''}
+                          `}>
+                            {dayNum}
+                          </span>
+                        </div>
+
+                        {/* Session Indicators */}
+                        {isCurrentMonthDay && daySessions.length > 0 && (
+                          <div className="flex-1 space-y-1 overflow-hidden">
+                            {daySessions.slice(0, 2).map((s, si) => (
+                              <div
+                                key={si}
+                                className={`text-xs px-1.5 py-0.5 rounded truncate font-medium ${
+                                  s.status === 'BOOKED' ? 'bg-blue-100 text-blue-800' :
+                                  s.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                                  s.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                                  'bg-purple-100 text-purple-800'
+                                }`}
+                                title={`${s.practitionerName || 'Session'} - ${formatSlotTime(s.startTime)} - ${s.status}`}
+                              >
+                                {formatSlotTime(s.startTime)} {s.practitionerName?.split(' ')[0] || ''}
+                              </div>
+                            ))}
+                            {daySessions.length > 2 && (
+                              <div className="text-xs text-slate-500 px-1.5 font-medium">+{daySessions.length - 2} more</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Legend */}
-              <div className="mt-6 flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-green-50 border-2 border-green-500 rounded"></div>
+              <div className="mt-5 flex flex-wrap items-center gap-5 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-green-600"></div>
                   <span className="text-slate-600">Today</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-50 border-2 border-blue-300 rounded flex items-center justify-center">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-                  </div>
-                  <span className="text-slate-600">Has Session</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-blue-100 border border-blue-300"></div>
+                  <span className="text-slate-600">Booked</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-green-100 border border-green-300"></div>
+                  <span className="text-slate-600">Completed</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-purple-100 border border-purple-300"></div>
+                  <span className="text-slate-600">On Hold</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded bg-red-100 border border-red-300"></div>
+                  <span className="text-slate-600">Cancelled</span>
                 </div>
               </div>
             </div>
@@ -934,9 +1266,8 @@ export default function UserDashboard() {
                   .filter(s => {
                     if (!s.sessionDate || s.status !== 'BOOKED') return false;
                     const sessionDate = new Date(s.sessionDate);
-                    const today = new Date();
-                    const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-                    return sessionDate >= today && sessionDate <= weekFromNow;
+                    const weekFromNow = new Date(todayDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    return sessionDate >= todayDate && sessionDate <= weekFromNow;
                   })
                   .slice(0, 5)
                   .map((session) => (
@@ -948,18 +1279,18 @@ export default function UserDashboard() {
                         <div>
                           <h4 className="text-sm font-semibold text-slate-900">{session.practitionerName}</h4>
                           <p className="text-xs text-slate-600">
-                            {session.sessionDate && new Date(session.sessionDate).toLocaleDateString('en-US', {
+                            {session.sessionDate && new Date(session.sessionDate + 'T00:00:00').toLocaleDateString('en-US', {
                               weekday: 'short',
                               month: 'short',
                               day: 'numeric'
                             })}
-                            {session.sessionTime && ` • ${session.sessionTime}`}
+                            {session.startTime && ` • ${formatSlotTime(session.startTime)}`}
                           </p>
                         </div>
                       </div>
-                      <button className="px-4 py-2 bg-green-500 text-white rounded-lg text-xs font-semibold hover:bg-green-600 transition-all">
-                        View Details
-                      </button>
+                      <span className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                        {session.status}
+                      </span>
                     </div>
                   ))}
                 {sessions.filter(s => s.status === 'BOOKED').length === 0 && (
@@ -971,86 +1302,172 @@ export default function UserDashboard() {
               </div>
             </div>
           </>
-        )}
+          );
+        })()}
 
-        {/* All other existing sections remain UNCHANGED */}
-        {/* Orders, Wellness, Messages, Profile, Settings sections stay exactly as they were */}
 
-        {activeSection === 'orders' && (
+        {activeSection === 'wallet' && (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Medicine Orders</h2>
-              <p className="text-slate-600 text-sm mt-2">Track your medicine orders and purchase history</p>
+              <h2 className="text-3xl font-bold text-slate-900">Wallet & Refunds</h2>
+              <p className="text-slate-600 text-sm mt-2">Manage your funds and track your refunds</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-8 text-white shadow-lg overflow-hidden relative">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                <div className="relative z-10">
+                  <p className="text-emerald-100 font-medium mb-1 uppercase tracking-wider text-sm">Available Balance</p>
+                  <h3 className="text-5xl font-bold">₹{parseFloat(walletBalance).toFixed(2)}</h3>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Withdraw Funds</h3>
+                <div className="flex gap-3">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={walletBalance}
+                      step="0.01"
+                      placeholder="0.00"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      className="w-full pl-8 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-lg border border-slate-300"
+                      required
+                    />
+                  </div>
+                  <button
+                    disabled={isWithdrawing || walletBalance <= 0}
+                    onClick={async () => {
+                      if (!withdrawAmount || isNaN(withdrawAmount) || withdrawAmount <= 0) {
+                        toast.error("Enter a valid amount");
+                        return;
+                      }
+                      if (withdrawAmount > walletBalance) {
+                        toast.error("Insufficient balance");
+                        return;
+                      }
+                      setIsWithdrawing(true);
+                      try {
+                        await withdrawFunds(withdrawAmount);
+                        toast.success("Withdrawal successful");
+                        setWithdrawAmount('');
+                        // Refresh Wallet Data
+                        getWalletBalance().then(r => setWalletBalance(r.balance)).catch(console.error);
+                        getWalletTransactions().then(r => setWalletTransactions(r.content || r)).catch(console.error);
+                      } catch (err) {
+                        toast.error(err.response?.data?.error || "Withdrawal failed");
+                      } finally {
+                        setIsWithdrawing(false);
+                      }
+                    }}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isWithdrawing ? 'Processing...' : 'Withdraw'}
+                  </button>
+                </div>
+
+                {/* Add Funds */}
+                <h3 className="text-lg font-semibold text-slate-800 mt-6 mb-4 border-t border-slate-100 pt-6">Add Funds</h3>
+                <div className="flex gap-3">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={addAmount}
+                      onChange={(e) => setAddAmount(e.target.value)}
+                      className="w-full pl-8 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-lg border border-slate-300"
+                      required
+                    />
+                  </div>
+                  <button
+                    disabled={isAdding}
+                    onClick={async () => {
+                      if (!addAmount || isNaN(addAmount) || addAmount <= 0) {
+                        toast.error("Enter a valid amount");
+                        return;
+                      }
+                      setIsAdding(true);
+                      try {
+                        await depositFunds(addAmount);
+                        toast.success("Funds added successfully");
+                        setAddAmount('');
+                        // Refresh Wallet Data
+                        getWalletBalance().then(r => setWalletBalance(r.balance)).catch(console.error);
+                        getWalletTransactions().then(r => setWalletTransactions(r.content || r)).catch(console.error);
+                      } catch (err) {
+                        toast.error(err.response?.data?.error || "Deposit failed");
+                      } finally {
+                        setIsAdding(false);
+                      }
+                    }}
+                    className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    {isAdding ? 'Processing...' : 'Add'}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-slate-900">Order History</h3>
-                <div className="flex gap-2">
-                  {['All', 'In Transit', 'Delivered'].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setOrderFilter(filter.toLowerCase().replace(' ', '-'))}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${orderFilter === filter.toLowerCase().replace(' ', '-')
-                        ? 'bg-green-500 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
-                        }`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
+              <div className="p-6 border-b border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-900">Transaction History</h3>
               </div>
-              <div className="p-6 space-y-4">
-                {[
-                  { id: 'ORD-2024', product: 'Organic Ashwagandha Supplement', qty: '2 bottles', date: 'Feb 8, 2026', price: 89.99, status: 'in-transit', icon: '🌿' },
-                  { id: 'ORD-2018', product: 'Premium Yoga Mat Bundle', qty: '1 set', date: 'Feb 3, 2026', price: 129.99, status: 'delivered', icon: '🧘' },
-                  { id: 'ORD-2012', product: 'Turmeric Curcumin Capsules', qty: '3 bottles', date: 'Jan 25, 2026', price: 54.99, status: 'delivered', icon: '💊' },
-                  { id: 'ORD-2005', product: 'Essential Oil Diffuser Set', qty: '1 set', date: 'Jan 15, 2026', price: 79.99, status: 'delivered', icon: '🌸' },
-                ].map((order, idx) => (
-                  <div key={idx} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-sm font-bold text-slate-900">{order.id}</span>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${order.status === 'in-transit'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-green-100 text-green-800'
-                        }`}>
-                        {order.status === 'in-transit' ? 'In Transit' : 'Delivered'}
-                      </span>
-                    </div>
-                    <div className="flex gap-4 mb-4">
-                      <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-indigo-200 rounded-lg flex items-center justify-center text-3xl flex-shrink-0">
-                        {order.icon}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-base font-semibold text-slate-900 mb-1">{order.product}</h4>
-                        <p className="text-sm text-slate-600 mb-2">Quantity: {order.qty}</p>
-                        <p className="text-xs text-slate-500">Ordered on {order.date}</p>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                      <span className="text-xl font-bold text-slate-900">${order.price}</span>
-                      <button className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${order.status === 'in-transit'
-                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        : 'bg-green-500 text-white hover:bg-green-600'
-                        }`}>
-                        {order.status === 'in-transit' ? 'Track Order' : 'Reorder'}
-                      </button>
-                    </div>
+              <div className="p-0">
+                {loadingWallet ? (
+                  <div className="flex justify-center p-12">
+                    <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
                   </div>
-                ))}
+                ) : walletTransactions.length === 0 ? (
+                  <div className="p-12 text-center text-slate-500">
+                    <span className="text-4xl mb-4 block">💸</span>
+                    No transactions yet.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-[500px] overflow-auto">
+                    {walletTransactions.map((tx) => (
+                      <div key={tx.id} className="flex justify-between items-center p-4 hover:bg-slate-50 transition">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 mb-1">
+                            {tx.type === 'REFUND' ? 'Refund for Cancelled Session' : (tx.type === 'DEPOSIT' ? 'Deposit' : 'Payment')}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(tx.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-bold ${tx.type === 'REFUND' || tx.type === 'DEPOSIT' ? 'text-green-600' : 'text-slate-900'}`}>
+                            {tx.type === 'REFUND' || tx.type === 'DEPOSIT' ? '+' : '-'}₹{parseFloat(tx.amount).toFixed(2)}
+                          </p>
+                          {tx.status && (
+                            <span className="text-xs text-slate-500">{tx.status}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </>
         )}
 
+
+
+        {/* ===== NEW: Missing Wellness Section fixed ===== */}
         {activeSection === 'wellness' && (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Wellness Tracking</h2>
-              <p className="text-slate-600 text-sm mt-2">Monitor your wellness journey and progress</p>
+              <h2 className="text-3xl font-bold text-slate-900">Wellness Dashboard</h2>
+              <p className="text-slate-600 text-sm mt-2">Track your wellness goals and overall progress</p>
             </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
                 <h3 className="text-xl font-semibold text-slate-900 mb-6">Overall Wellness Score</h3>
@@ -1138,16 +1555,44 @@ export default function UserDashboard() {
         {activeSection === 'messages' && (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Messages</h2>
-              <p className="text-slate-600 text-sm mt-2">Chat with your practitioners and support team</p>
+              <h2 className="text-3xl font-bold text-slate-900">Messages & Documents</h2>
+              <p className="text-slate-600 text-sm mt-2">View prescribed documents from your practitioners</p>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-              <div className="text-center py-20">
-                <div className="text-6xl mb-4">💬</div>
-                <h3 className="text-xl font-semibold text-slate-900 mb-2">No messages yet</h3>
-                <p className="text-slate-600 text-sm">Your conversations with practitioners will appear here</p>
-              </div>
+              {sessions.filter(s => s.status === 'COMPLETED' && s.prescribedDocumentUrl).length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="text-6xl mb-4">💬</div>
+                  <h3 className="text-xl font-semibold text-slate-900 mb-2">No messages or documents yet</h3>
+                  <p className="text-slate-600 text-sm">Prescribed documents from your practitioners will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sessions
+                    .filter(s => s.status === 'COMPLETED' && s.prescribedDocumentUrl)
+                    .map(session => (
+                      <div key={session.id} className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow">
+                        <div className="flex justify-between items-start">
+                          <div className="flex gap-4 items-center">
+                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-xl">📄</div>
+                            <div>
+                              <h4 className="font-semibold text-slate-900">Prescription from {session.practitionerName}</h4>
+                              <p className="text-sm text-slate-500">
+                                Session on {new Date(session.sessionDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDownloadDocument(session.id, session.practitionerName)}
+                            className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-semibold hover:bg-blue-100 transition"
+                          >
+                            Download PDF
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           </>
         )}
@@ -1279,14 +1724,60 @@ export default function UserDashboard() {
                         className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
-                      <textarea
-                        value={editData.address}
-                        onChange={(e) => setEditData({ ...editData, address: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[80px] resize-none"
-                        placeholder="Enter your address"
-                      />
+                    <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
+                      <label className="block text-sm font-semibold text-slate-700 mb-3">Address</label>
+                      {(() => {
+                        const addrInfo = parseStructuredAddress(editData.address);
+                        const updateAddr = (field, val) => {
+                          const newInfo = { ...addrInfo, [field]: val };
+                          const newAddrStr = `House No: ${newInfo.houseNo}, Area: ${newInfo.area}, District: ${newInfo.district}, State: ${newInfo.state}`;
+                          setEditData({ ...editData, address: newAddrStr });
+                        };
+                        return (
+                          <div className="space-y-3">
+                            <div className="flex gap-3">
+                              <div className="flex-1">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">House No. / Flat</label>
+                                <input
+                                  type="text"
+                                  value={addrInfo.houseNo}
+                                  onChange={(e) => updateAddr('houseNo', e.target.value)}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+                              </div>
+                              <div className="flex-[2]">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">Area / Village Name</label>
+                                <input
+                                  type="text"
+                                  value={addrInfo.area}
+                                  onChange={(e) => updateAddr('area', e.target.value)}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-3">
+                              <div className="flex-1">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">District</label>
+                                <input
+                                  type="text"
+                                  value={addrInfo.district}
+                                  onChange={(e) => updateAddr('district', e.target.value)}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="block text-xs font-semibold text-slate-600 mb-1">State</label>
+                                <input
+                                  type="text"
+                                  value={addrInfo.state}
+                                  onChange={(e) => updateAddr('state', e.target.value)}
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-2">Bio</label>
@@ -1322,6 +1813,8 @@ export default function UserDashboard() {
             </div>
           </>
         )}
+
+
 
         {activeSection === 'settings' && (
           <>
@@ -1374,6 +1867,20 @@ export default function UserDashboard() {
           </>
         )}
       </div>
-    </div>
+      {/* Review Form Modal */}
+      {reviewSession && (
+        <ReviewForm
+          practitionerId={reviewSession.practitionerId}
+          practitionerName={reviewSession.practitionerName || 'Practitioner'}
+          sessionId={reviewSession.id}
+          onSuccess={() => {
+            setReviewSession(null);
+            fetchSessions();
+            fetchPractitioners();
+          }}
+          onClose={() => setReviewSession(null)}
+        />
+      )}
+    </div >
   );
 }

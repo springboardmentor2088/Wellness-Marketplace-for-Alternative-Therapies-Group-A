@@ -1,6 +1,7 @@
 package com.wellness.backend.controller;
 
 import com.wellness.backend.dto.OrderDTO;
+import com.wellness.backend.dto.OrderSummaryDTO;
 import com.wellness.backend.dto.CreateOrderDTO;
 import com.wellness.backend.service.OrderService;
 import jakarta.validation.Valid;
@@ -37,11 +38,52 @@ public class OrderController {
     @GetMapping("/history")
     public ResponseEntity<List<OrderDTO>> getOrderHistory(Authentication authentication) {
         String userEmail = authentication.getName();
-        List<OrderDTO> orders = orderService.getOrderHistory(userEmail);
+        return ResponseEntity.ok(orderService.getOrderHistory(userEmail));
+    }
+
+    // GET /api/orders/summary — Get order summary from DB cart
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'ADMIN')")
+    @GetMapping("/summary")
+    public ResponseEntity<OrderSummaryDTO> getOrderSummary(Authentication authentication) {
+        String userEmail = authentication.getName();
+        return ResponseEntity.ok(orderService.getOrderSummary(userEmail));
+    }
+
+    // POST /api/orders/calculate — Calculate summary from provided items (for Buy Now)
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'ADMIN')")
+    @PostMapping("/calculate")
+    public ResponseEntity<OrderSummaryDTO> calculateSummary(@RequestBody CreateOrderDTO dto) {
+        return ResponseEntity.ok(orderService.calculateSummaryFromItems(dto.getItems()));
+    }
+
+    @GetMapping("/test-history")
+    public ResponseEntity<List<OrderDTO>> testHistory() {
+        return ResponseEntity.ok(orderService.getAllOrders());
+    }
+
+    // GET /api/orders/all — Get all orders globally
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/all")
+    public ResponseEntity<List<OrderDTO>> getAllOrders() {
+        List<OrderDTO> orders = orderService.getAllOrders();
         return ResponseEntity.ok(orders);
     }
 
+    // TEMPORARY DEBUG ENDPOINT
+    @GetMapping("/debug-cancel/{id}")
+    public ResponseEntity<String> debugCancel(@PathVariable Integer id) {
+        try {
+            orderService.cancelOrder(id, "Debug");
+            return ResponseEntity.ok("Success");
+        } catch (Exception e) {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            e.printStackTrace(new java.io.PrintWriter(sw));
+            return ResponseEntity.status(500).body(sw.toString());
+        }
+    }
+
     // GET /api/orders/{id} — Get order details
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<OrderDTO> getOrderById(@PathVariable Integer id) {
         OrderDTO order = orderService.getOrderById(id);

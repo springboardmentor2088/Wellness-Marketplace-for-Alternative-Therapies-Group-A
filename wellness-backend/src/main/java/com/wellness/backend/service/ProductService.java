@@ -69,6 +69,7 @@ public class ProductService {
         product.setPrice(dto.getPrice());
         product.setCategory(dto.getCategory());
         product.setStock(dto.getStock());
+        product.setImageUrl(dto.getImageUrl());
 
         Product saved = productRepository.save(product);
         return mapToDTO(saved);
@@ -85,6 +86,7 @@ public class ProductService {
         if (dto.getPrice() != null) product.setPrice(dto.getPrice());
         if (dto.getCategory() != null) product.setCategory(dto.getCategory());
         if (dto.getStock() != null) product.setStock(dto.getStock());
+        if (dto.getImageUrl() != null) product.setImageUrl(dto.getImageUrl());
 
         Product updated = productRepository.save(product);
         return mapToDTO(updated);
@@ -109,6 +111,7 @@ public class ProductService {
         dto.setCategory(product.getCategory());
         dto.setStock(product.getStock());
         dto.setAvailable(product.getStock() > 0);
+        dto.setImageUrl(product.getImageUrl());
         return dto;
     }
 }

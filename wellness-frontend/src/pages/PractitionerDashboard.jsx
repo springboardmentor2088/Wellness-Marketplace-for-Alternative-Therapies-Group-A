@@ -4,21 +4,19 @@ import toast from 'react-hot-toast';
 import axios from 'axios';
 import { getAccessToken } from '../services/authService';
 import { getCurrentUser, updateUser } from '../services/userService';
-import { getRequestsForPractitioner, acceptRequest, rejectRequest, completeRequest } from '../services/requestService';
 import { getSessionsForPractitioner, getAvailability, setAvailability } from '../services/sessionService';
 import SessionCard from '../components/SessionCard';
-import AvailabilityDayCard from '../components/AvailabilityDayCard';
 import NotificationDropdown from '../components/NotificationDropdown';
+import WalletWidget from '../components/WalletWidget';
+import { getPendingEarnings, withdrawEarnings } from '../services/walletService';
 
 export default function PractitionerDashboard() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('dashboard');
-  const [appointmentFilter, setAppointmentFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
   const [practitionerProfile, setPractitionerProfile] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
-  const [requests, setRequests] = useState([]);
   const [settingsData, setSettingsData] = useState({
     name: '', specialization: '', experience: '', qualifications: '',
     email: '', phone: ''
@@ -30,6 +28,7 @@ export default function PractitionerDashboard() {
   const [availability, setAvailabilityState] = useState([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+  const [selectedDay, setSelectedDay] = useState('MONDAY');
   const [scheduleData, setScheduleData] = useState(
     DAYS.map((day, idx) => ({
       dayOfWeek: day,
@@ -40,6 +39,11 @@ export default function PractitionerDashboard() {
     }))
   );
   const [slotDuration, setSlotDuration] = useState(60);
+
+  // Earnings State
+  const [earningsData, setEarningsData] = useState({ totalPending: 0, sessionCount: 0, earnings: [] });
+  const [loadingEarnings, setLoadingEarnings] = useState(false);
+  const [isWithdrawingEarnings, setIsWithdrawingEarnings] = useState(false);
 
   useEffect(() => {
     const initDashboard = async () => {
@@ -101,6 +105,7 @@ export default function PractitionerDashboard() {
                 specialization: practProfile.specialization || '',
                 experience: practProfile.experience || '',
                 qualifications: practProfile.qualifications || '',
+                consultationFee: practProfile.consultationFee || '',
                 email: userEmail,
                 phone: userPhone
               });
@@ -116,14 +121,14 @@ export default function PractitionerDashboard() {
             }
           }
 
-          // Fetch requests for this practitioner
+          // Fetch sessions for this practitioner (Unified source of truth)
           const practId = practProfile?.id || practProfile?.practitionerId;
           if (practId) {
             try {
-              const reqData = await getRequestsForPractitioner(practId);
-              setRequests(Array.isArray(reqData) ? reqData : (reqData.data || []));
+              const sessionsData = await getSessionsForPractitioner(practId);
+              setPractSessions(sessionsData);
             } catch (err) {
-              console.error('Error fetching requests:', err);
+              console.error('Error fetching sessions:', err);
             }
           }
         } else {
@@ -141,42 +146,11 @@ export default function PractitionerDashboard() {
     initDashboard();
   }, [navigate]);
 
-  // Derived stats from requests
-  const uniquePatients = [...new Map(requests.map(r => [r.userId, r])).values()];
-  const pendingRequests = requests.filter(r => r.status === 'PENDING');
-  const completedRequests = requests.filter(r => r.status === 'COMPLETED');
-  const acceptedRequests = requests.filter(r => r.status === 'ACCEPTED');
-
-  // Handle request status changes
-  const handleAcceptRequest = async (requestId) => {
-    try {
-      await acceptRequest(requestId);
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'ACCEPTED' } : r));
-      toast.success('Request accepted');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to accept request');
-    }
-  };
-
-  const handleCompleteRequest = async (requestId) => {
-    try {
-      await completeRequest(requestId);
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'COMPLETED' } : r));
-      toast.success('Request marked as completed');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to complete request');
-    }
-  };
-
-  const handleRejectRequest = async (requestId) => {
-    try {
-      await rejectRequest(requestId);
-      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'REJECTED' } : r));
-      toast.success('Request rejected');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to reject request');
-    }
-  };
+  // Derived stats from unified sessions
+  const uniquePatients = [...new Map(practSessions.map(s => [s.userId, s])).values()];
+  const pendingRequests = practSessions.filter(s => s.status === 'HOLD');
+  const completedRequests = practSessions.filter(s => s.status === 'COMPLETED');
+  const acceptedRequests = practSessions.filter(s => s.status === 'BOOKED');
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
@@ -193,7 +167,8 @@ export default function PractitionerDashboard() {
         await axios.put(`/api/practitioners/${practitionerProfile.id}`, {
           specialization: settingsData.specialization,
           experience: settingsData.experience,
-          qualifications: settingsData.qualifications
+          qualifications: settingsData.qualifications,
+          consultationFee: settingsData.consultationFee || null
         }, {
           headers: { Authorization: `Bearer ${getAccessToken()}` }
         });
@@ -207,9 +182,9 @@ export default function PractitionerDashboard() {
     }
   };
 
-  // Fetch sessions when sessions section is opened
+  // Fetch sessions when dashboard or sessions section is opened
   useEffect(() => {
-    if (activeSection === 'sessions' && practitionerProfile?.id) {
+    if ((activeSection === 'sessions' || activeSection === 'dashboard') && practitionerProfile?.id) {
       setLoadingSessions(true);
       getSessionsForPractitioner(practitionerProfile.id)
         .then(data => setPractSessions(data))
@@ -247,27 +222,68 @@ export default function PractitionerDashboard() {
     }
   }, [activeSection, practitionerProfile?.id]);
 
-  // Save schedule handler
-  const handleSaveSchedule = async () => {
+  // Fetch earnings when earnings section is opened
+  useEffect(() => {
+    if (activeSection === 'earnings') {
+      setLoadingEarnings(true);
+      getPendingEarnings()
+        .then(data => setEarningsData(data))
+        .catch(err => console.error('Failed to load earnings:', err))
+        .finally(() => setLoadingEarnings(false));
+    }
+  }, [activeSection]);
+
+  useEffect(() => {
+    const handleWs = (e) => {
+      const msg = e.detail;
+      if (msg && (
+        msg.type === 'PAYMENT_SUCCESS' ||
+        msg.type === 'PAYMENT_RECEIVED' ||
+        msg.type === 'REFUND_PROCESSED' ||
+        msg.type === 'SESSION_CANCELLED' ||
+        msg.type === 'SESSION_COMPLETED' ||
+        msg.type === 'SESSION_BOOKED'
+      )) {
+        if (['sessions', 'earnings', 'dashboard'].includes(activeSection) && practitionerProfile?.id) {
+          getSessionsForPractitioner(practitionerProfile.id)
+            .then(data => setPractSessions(data))
+            .catch(err => console.error('Failed to load sessions:', err));
+        }
+
+        if (activeSection === 'earnings') {
+          getPendingEarnings()
+            .then(data => setEarningsData(data))
+            .catch(err => console.error('Failed to load earnings:', err));
+        }
+      }
+    };
+    window.addEventListener('wsNotification', handleWs);
+    return () => window.removeEventListener('wsNotification', handleWs);
+  }, [activeSection, practitionerProfile?.id]);
+
+  // Save specific day availability
+  const handleSaveDay = async () => {
     if (!practitionerProfile?.id) {
       toast.error('Practitioner profile not loaded');
       return;
     }
     setSavingSchedule(true);
     try {
-      for (const day of scheduleData) {
-        await setAvailability(practitionerProfile.id, {
-          dayOfWeek: day.dayOfWeek,
-          startTime: day.startTime,
-          endTime: day.endTime,
-          slotDuration: slotDuration,
-          isAvailable: day.isAvailable
-        });
-      }
-      toast.success('Schedule saved successfully!');
+      const activeData = scheduleData.find(d => d.dayOfWeek === selectedDay);
+      await setAvailability(practitionerProfile.id, {
+        dayOfWeek: activeData.dayOfWeek,
+        startTime: activeData.startTime,
+        endTime: activeData.endTime,
+        slotDuration: activeData.slotDuration,
+        isAvailable: activeData.isAvailable
+      });
+      // Refresh to ensure synced
+      const updated = await getAvailability(practitionerProfile.id);
+      setAvailabilityState(updated);
+      toast.success(`${selectedDay.charAt(0) + selectedDay.slice(1).toLowerCase()} availability saved successfully!`);
     } catch (err) {
-      console.error('Error saving schedule:', err);
-      toast.error(err.response?.data?.message || 'Failed to save schedule');
+      console.error('Error saving availability:', err);
+      toast.error(err.response?.data?.message || 'Failed to save availability');
     } finally {
       setSavingSchedule(false);
     }
@@ -341,16 +357,6 @@ export default function PractitionerDashboard() {
             <span>Dashboard</span>
           </button>
 
-          <button
-            onClick={() => setActiveSection('appointments')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'appointments'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>📅</span>
-            <span>Appointments</span>
-          </button>
 
           <button
             onClick={() => setActiveSection('patients')}
@@ -361,17 +367,6 @@ export default function PractitionerDashboard() {
           >
             <span>👥</span>
             <span>My Patients</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSection('schedule')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'schedule'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>🗓️</span>
-            <span>Schedule</span>
           </button>
 
           <button
@@ -418,6 +413,17 @@ export default function PractitionerDashboard() {
             <span>Messages</span>
           </button>
 
+
+
+          {/* ===== NEW: Community Forum ===== */}
+          <button
+            onClick={() => navigate('/community-forum')}
+            className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-white/5"
+          >
+            <span>💬</span>
+            <span>Community Forum</span>
+          </button>
+
           <button
             onClick={() => setActiveSection('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'settings'
@@ -428,6 +434,24 @@ export default function PractitionerDashboard() {
             <span>⚙️</span>
             <span>Settings</span>
           </button>
+
+          <div className="mt-8 pt-6 border-t border-white/10">
+            <button
+              onClick={() => {
+                localStorage.removeItem('user');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('adminLoggedIn');
+                navigate('/login');
+              }}
+              className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-red-500/20 hover:text-red-300 rounded-lg"
+            >
+              <span>🚪</span>
+              <span>Logout</span>
+            </button>
+          </div>
         </nav>
       </div>
 
@@ -435,6 +459,7 @@ export default function PractitionerDashboard() {
       <div className="ml-64 flex-1 p-8">
         {/* Top Header Bar */}
         <div className="flex justify-end items-center mb-6">
+          <WalletWidget />
           <NotificationDropdown />
         </div>
 
@@ -467,7 +492,7 @@ export default function PractitionerDashboard() {
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setActiveSection('schedule')}
+                  onClick={() => setActiveSection('availability')}
                   className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
                 >
                   <span className="mr-2">📅</span>
@@ -496,22 +521,19 @@ export default function PractitionerDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-xs text-slate-600">
-                  <span>From {requests.length} total requests</span>
+                  <span>From {practSessions.length} total requests</span>
                 </div>
               </div>
 
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">{pendingRequests.length}</div>
+                    <div className="text-3xl font-bold text-slate-900">{pendingRequests.length + acceptedRequests.length}</div>
                     <div className="text-sm text-slate-600 font-medium">Pending Requests</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center text-2xl">
                     📋
                   </div>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-blue-600">
-                  <span>{acceptedRequests.length} accepted</span>
                 </div>
               </div>
 
@@ -534,18 +556,19 @@ export default function PractitionerDashboard() {
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">{completedRequests.length}</div>
-                    <div className="text-sm text-slate-600 font-medium">Completed</div>
+                    <div className="text-3xl font-bold text-slate-900">{userProfile?.reputationScore || 0}</div>
+                    <div className="text-sm text-slate-600 font-medium">Reputation</div>
                   </div>
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-xl flex items-center justify-center text-2xl">
-                    ✅
+                  <div className="w-12 h-12 bg-gradient-to-br from-teal-100 to-teal-200 rounded-xl flex items-center justify-center text-2xl">
+                    🏆
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-xs text-green-600">
-                  <span>Total completed requests</span>
+                <div className="flex items-center gap-1 text-xs text-teal-600">
+                  <span>Community expert points</span>
                 </div>
               </div>
             </div>
+
 
             {/* Quick Overview Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -553,163 +576,120 @@ export default function PractitionerDashboard() {
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Requests</h3>
                 <div className="space-y-3">
-                  {requests.length === 0 ? (
+                  {practSessions.length === 0 ? (
                     <div className="text-center py-8 text-slate-500">
                       <div className="text-4xl mb-2">📋</div>
-                      <p className="text-sm">No requests yet</p>
+                      <p className="text-sm">No sessions yet</p>
                     </div>
-                  ) : requests.slice(0, 4).map((req) => (
-                    <div key={req.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-sm transition-all">
+                  ) : practSessions.slice(0, 4).map((session) => (
+                    <div key={session.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-sm transition-all">
                       <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                            {(req.userName || 'U').split(' ').map(n => n[0]).join('')}
+                            {(session.userName || 'U').split(' ').map(n => n[0]).join('')}
                           </div>
                           <div>
-                            <h4 className="text-sm font-semibold text-slate-900">{req.userName || 'Patient'}</h4>
-                            <p className="text-xs text-slate-600">{req.description || 'No description'}</p>
+                            <h4 className="text-sm font-semibold text-slate-900">{session.userName || 'Patient'}</h4>
+                            <p className="text-xs text-slate-600">{session.notes || 'Consultation Session'}</p>
                           </div>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                          req.status === 'ACCEPTED' ? 'bg-blue-100 text-blue-800' :
-                            req.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${session.status === 'HOLD' ? 'bg-purple-100 text-purple-800' :
+                          session.status === 'BOOKED' ? 'bg-blue-100 text-blue-800' :
+                            session.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
                               'bg-red-100 text-red-800'
                           }`}>
-                          {req.status}
+                          {session.status}
                         </span>
                       </div>
                     </div>
                   ))}
                 </div>
                 <button
-                  onClick={() => setActiveSection('appointments')}
+                  onClick={() => setActiveSection('sessions')}
                   className="w-full mt-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-slate-200 transition-all"
                 >
-                  View All Requests
+                  View All Sessions
                 </button>
               </div>
 
-              {/* Recent Activity */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
-                <h3 className="text-lg font-semibold text-green-900 mb-4">Recent Activity</h3>
-                <div className="space-y-3">
-                  {requests.length === 0 ? (
-                    <div className="text-center py-8 text-green-700">
-                      <div className="text-4xl mb-2">📭</div>
-                      <p className="text-sm">No activity yet</p>
-                    </div>
-                  ) : requests.slice(0, 4).map((req) => (
-                    <div key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-200">
-                      <div className="w-10 h-10 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center text-xl">
-                        {req.status === 'COMPLETED' ? '✅' : req.status === 'ACCEPTED' ? '📅' : req.status === 'PENDING' ? '🔔' : '❌'}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-900">
-                          {req.status === 'PENDING' ? 'New request' : req.status === 'ACCEPTED' ? 'Request accepted' : req.status === 'COMPLETED' ? 'Session completed' : 'Request ' + req.status.toLowerCase()}
-                        </p>
-                        <p className="text-xs text-slate-600">{req.userName || 'Patient'} • {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'Recently'}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+              {/* Next Session */}
+              {(() => {
+                const todayStr = new Date().toISOString().split('T')[0];
+                const upcoming = practSessions
+                  .filter(s => s.sessionDate >= todayStr && s.status === 'BOOKED')
+                  .sort((a, b) => new Date(`${a.sessionDate}T${a.startTime}`) - new Date(`${b.sessionDate}T${b.startTime}`));
+                const nextSession = upcoming.length > 0 ? upcoming[0] : null;
 
-        {/* Appointments Section */}
-        {activeSection === 'appointments' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Appointments</h2>
-              <p className="text-slate-600 text-sm mt-2">Manage your upcoming and past appointments</p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-slate-900">All Appointments</h3>
-                <div className="flex gap-2">
-                  {['All', 'Upcoming', 'Completed', 'Cancelled'].map((filter) => (
-                    <button
-                      key={filter}
-                      onClick={() => setAppointmentFilter(filter.toLowerCase())}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${appointmentFilter === filter.toLowerCase()
-                        ? 'bg-green-500 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
-                        }`}
-                    >
-                      {filter}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="p-6 space-y-4">
-                {requests.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="text-5xl mb-4">📋</div>
-                    <h4 className="text-lg font-semibold text-slate-900 mb-2">No requests yet</h4>
-                    <p className="text-slate-600 text-sm">Patient requests will appear here</p>
-                  </div>
-                ) : requests
-                  .filter(r => appointmentFilter === 'all' || r.status === appointmentFilter.toUpperCase())
-                  .map((req) => (
-                    <div key={req.id} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                            {(req.userName || 'U').split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div>
-                            <h4 className="text-base font-semibold text-slate-900">{req.userName || 'Patient'}</h4>
-                            <p className="text-sm text-slate-600">{req.description || 'No description'}</p>
-                          </div>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                          req.status === 'ACCEPTED' ? 'bg-blue-100 text-blue-800' :
-                            req.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                              'bg-red-100 text-red-800'
-                          }`}>
-                          {req.status}
+                return (
+                  <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold text-purple-900">Next Session</h3>
+                      {nextSession && (
+                        <span className="text-sm text-purple-700 font-medium whitespace-nowrap">
+                          {nextSession.sessionDate === todayStr ? 'Today' : nextSession.sessionDate}
                         </span>
-                      </div>
-                      <div className="flex gap-6 text-sm text-slate-600 mb-4">
-                        <span className="flex items-center gap-1">📅 {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'N/A'}</span>
-                        <span className="flex items-center gap-1">🔖 {req.priority || 'MEDIUM'}</span>
-                        <span className="flex items-center gap-1">📧 {req.userEmail || ''}</span>
-                      </div>
-                      {req.status === 'PENDING' && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleAcceptRequest(req.id)}
-                            className="flex-1 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleRejectRequest(req.id)}
-                            className="px-4 py-2.5 bg-red-100 text-red-700 rounded-lg font-semibold hover:bg-red-200 transition-all"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      )}
-                      {req.status === 'ACCEPTED' && (
-                        <button
-                          onClick={() => handleCompleteRequest(req.id)}
-                          className="w-full py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
-                        >
-                          Mark as Completed
-                        </button>
-                      )}
-                      {(req.status === 'COMPLETED' || req.status === 'REJECTED' || req.status === 'CANCELLED') && (
-                        <div className="text-sm text-slate-500 italic">This request is {req.status.toLowerCase()}</div>
                       )}
                     </div>
-                  ))}
-              </div>
+
+                    {nextSession ? (
+                      <>
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-800 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0">
+                            {(nextSession.userName || 'P').split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-base font-semibold text-purple-900 truncate">
+                              {nextSession.userName || 'Patient'}
+                            </h4>
+                            <p className="text-sm text-purple-700 truncate">
+                              {nextSession.notes || 'Wellness Consultation'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="pt-3 border-t border-purple-300/50 space-y-2">
+                          <div className="flex items-center gap-2 text-purple-700 text-sm">
+                            <span>📅</span>
+                            <span>{new Date(`${nextSession.sessionDate}T${nextSession.startTime}`).toLocaleString('en-US', {
+                              month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                            })}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-purple-700 text-sm">
+                            <span>📍</span>
+                            <span>Video Call</span>
+                          </div>
+                        </div>
+                        {(() => {
+                          const sessionStart = new Date(`${nextSession.sessionDate}T${nextSession.startTime}`);
+                          const canJoin = (sessionStart - new Date()) / 60000 <= 15;
+                          return canJoin && nextSession.meetingLink ? (
+                            <a
+                              href={nextSession.meetingLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full mt-4 py-3 bg-purple-700 text-white rounded-lg font-semibold hover:bg-purple-800 transition-all block text-center"
+                            >
+                              Join Session
+                            </a>
+                          ) : (
+                            <div className="w-full mt-4 py-3 bg-purple-300 text-purple-100 rounded-lg font-semibold text-center cursor-not-allowed">
+                              Join available 15 min before session
+                            </div>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-6 text-purple-800">
+                        <div className="text-4xl mb-3">📭</div>
+                        <p className="text-sm font-medium">No upcoming sessions</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </>
         )}
+
 
         {/* Sessions Section */}
         {activeSection === 'sessions' && (
@@ -780,7 +760,7 @@ export default function PractitionerDashboard() {
                     <p className="text-slate-600 text-sm">Once patients send you requests, they will appear here</p>
                   </div>
                 ) : uniquePatients.map((patient) => {
-                  const patientRequests = requests.filter(r => r.userId === patient.userId);
+                  const patientRequests = practSessions.filter(r => r.userId === patient.userId);
                   const lastRequest = patientRequests[patientRequests.length - 1];
                   return (
                     <div key={patient.userId} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
@@ -812,131 +792,96 @@ export default function PractitionerDashboard() {
           </>
         )}
 
-        {/* Schedule Section */}
-        {activeSection === 'schedule' && (
-          <>
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Schedule Management</h2>
-              <p className="text-slate-600 text-sm mt-2">Set your availability and manage your calendar</p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Working Hours</h3>
-                <div className="space-y-3">
-                  {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, idx) => (
-                    <div key={idx} className={`flex items-center justify-between p-3 rounded-lg ${scheduleData[idx].isAvailable ? 'bg-slate-50' : 'bg-slate-100 opacity-60'}`}>
-                      <span className="text-sm font-medium text-slate-900 w-24">{day}</span>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="time"
-                          className="px-3 py-1 border border-slate-300 rounded text-sm"
-                          value={scheduleData[idx].startTime}
-                          disabled={!scheduleData[idx].isAvailable}
-                          onChange={(e) => setScheduleData(prev => prev.map((item, i) => i === idx ? { ...item, startTime: e.target.value } : item))}
-                        />
-                        <span className="text-slate-600">to</span>
-                        <input
-                          type="time"
-                          className="px-3 py-1 border border-slate-300 rounded text-sm"
-                          value={scheduleData[idx].endTime}
-                          disabled={!scheduleData[idx].isAvailable}
-                          onChange={(e) => setScheduleData(prev => prev.map((item, i) => i === idx ? { ...item, endTime: e.target.value } : item))}
-                        />
-                        <input
-                          type="checkbox"
-                          className="w-5 h-5"
-                          checked={scheduleData[idx].isAvailable}
-                          onChange={(e) => setScheduleData(prev => prev.map((item, i) => i === idx ? { ...item, isAvailable: e.target.checked } : item))}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  onClick={handleSaveSchedule}
-                  disabled={savingSchedule}
-                  className="w-full mt-4 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 disabled:bg-gray-300 transition-all"
-                >
-                  {savingSchedule ? 'Saving...' : 'Save Schedule'}
-                </button>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
-                <h3 className="text-lg font-semibold text-green-900 mb-4">Availability Settings</h3>
-                <div className="space-y-4">
-                  <div className="bg-white rounded-lg p-4 border border-green-200">
-                    <label className="block text-sm font-medium text-slate-900 mb-2">Session Duration</label>
-                    <select
-                      value={slotDuration}
-                      onChange={(e) => setSlotDuration(parseInt(e.target.value))}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    >
-                      <option value={30}>30 minutes</option>
-                      <option value={45}>45 minutes</option>
-                      <option value={60}>60 minutes</option>
-                      <option value={90}>90 minutes</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
         {/* Earnings Section */}
         {activeSection === 'earnings' && (
           <>
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Earnings</h2>
-              <p className="text-slate-600 text-sm mt-2">Track your income and financial performance</p>
+            <div className="mb-8 flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900">Earnings</h2>
+                <p className="text-slate-600 text-sm mt-2">Track your pending payouts and session earnings</p>
+              </div>
+              <button
+                disabled={isWithdrawingEarnings || earningsData.totalPending <= 0}
+                onClick={async () => {
+                  try {
+                    setIsWithdrawingEarnings(true);
+                    const res = await withdrawEarnings();
+                    toast.success(res.message || "Withdrawal successful");
+                    // Refresh earnings
+                    const data = await getPendingEarnings();
+                    setEarningsData(data);
+                  } catch (err) {
+                    console.error("Withdrawal error", err);
+                    toast.error(err.response?.data?.error || "Withdrawal failed");
+                  } finally {
+                    setIsWithdrawingEarnings(false);
+                  }
+                }}
+                className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-all disabled:opacity-50"
+              >
+                {isWithdrawingEarnings ? 'Processing...' : `Withdraw ₹${(earningsData.totalPending || 0).toFixed(2)}`}
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-600 mb-2">This Month</h3>
-                <p className="text-3xl font-bold text-slate-900">$2,450</p>
-                <p className="text-xs text-green-600 mt-2">↑ 12% from last month</p>
+            {loadingEarnings ? (
+              <div className="flex justify-center py-16">
+                <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
-
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-600 mb-2">Total Earned</h3>
-                <p className="text-3xl font-bold text-slate-900">$18,950</p>
-                <p className="text-xs text-slate-600 mt-2">Lifetime earnings</p>
-              </div>
-
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-600 mb-2">Pending Payout</h3>
-                <p className="text-3xl font-bold text-slate-900">$680</p>
-                <p className="text-xs text-blue-600 mt-2">Available Feb 20</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Transactions</h3>
-              <div className="space-y-3">
-                {[
-                  { patient: 'John Smith', date: 'Feb 14, 2026', amount: 75, status: 'completed' },
-                  { patient: 'Sarah Johnson', date: 'Feb 13, 2026', amount: 75, status: 'completed' },
-                  { patient: 'Michael Brown', date: 'Feb 12, 2026', amount: 75, status: 'pending' },
-                  { patient: 'Emily Davis', date: 'Feb 10, 2026', amount: 75, status: 'completed' },
-                ].map((transaction, idx) => (
-                  <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 rounded-lg">
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-900">{transaction.patient}</h4>
-                      <p className="text-xs text-slate-600">{transaction.date}</p>
+                      <h3 className="text-sm font-semibold text-slate-600 mb-2">Pending Sessions</h3>
+                      <p className="text-4xl font-bold text-slate-900">{pendingRequests.length}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-base font-bold text-slate-900">${transaction.amount}</p>
-                      <span className={`text-xs font-semibold ${transaction.status === 'completed' ? 'text-green-600' : 'text-blue-600'
-                        }`}>
-                        {transaction.status}
-                      </span>
-                    </div>
+                    <div className="text-5xl opacity-80">📅</div>
                   </div>
-                ))}
-              </div>
-            </div>
+
+                  <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-600 mb-2">Completed Sessions</h3>
+                      <p className="text-4xl font-bold text-slate-900">{completedRequests.length}</p>
+                    </div>
+                    <div className="text-5xl opacity-80">✅</div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-sm flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-green-100 mb-2">Ready for Payout</h3>
+                      <p className="text-4xl font-bold">₹{(earningsData.totalPending || 0).toFixed(2)}</p>
+                    </div>
+                    <div className="text-5xl opacity-80">💰</div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 overflow-hidden">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">Pending Transactions</h3>
+
+                  {(!earningsData.earnings || earningsData.earnings.length === 0) ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <div className="text-4xl mb-2">💸</div>
+                      <p className="text-sm">No pending earnings to display</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {earningsData.earnings.map((earning, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 rounded-lg">
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-900">Session ID: #{earning.sessionId}</h4>
+                            <p className="text-xs text-slate-600">Created: {new Date(earning.createdAt).toLocaleDateString()}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-bold text-slate-900">₹{earning.netAmount.toFixed(2)}</p>
+                            <span className="text-xs font-semibold text-amber-600">PENDING</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -1005,6 +950,18 @@ export default function PractitionerDashboard() {
                         value={settingsData.experience}
                         onChange={(e) => setSettingsData({ ...settingsData, experience: e.target.value })}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Consultation Fee (₹)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={settingsData.consultationFee}
+                        onChange={(e) => setSettingsData({ ...settingsData, consultationFee: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                        placeholder="e.g. 500"
                       />
                     </div>
                   </div>
@@ -1103,25 +1060,114 @@ export default function PractitionerDashboard() {
         {activeSection === 'availability' && (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Manage Availability</h2>
-              <p className="text-slate-600 text-sm mt-2">Set your weekly schedule so patients can book sessions</p>
+              <h2 className="text-3xl font-bold text-slate-900">Manage Availability & Schedule</h2>
+              <p className="text-slate-600 text-sm mt-2">Select a day to set your active working hours.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {DAYS.map((day) => (
-                <AvailabilityDayCard
-                  key={day}
-                  day={day}
-                  existing={availability.find(a => a.dayOfWeek === day) || {}}
-                  practitionerId={practitionerProfile?.id}
-                  onSaved={async () => {
-                    if (practitionerProfile?.id) {
-                      const updated = await getAvailability(practitionerProfile.id);
-                      setAvailabilityState(updated);
-                    }
-                  }}
-                />
-              ))}
+            <div className="flex flex-col lg:flex-row gap-6">
+              {/* LEFT COLUMN: Days List */}
+              <div className="w-full lg:w-1/3 bg-white border border-slate-200 shadow-sm rounded-xl p-4 flex flex-col gap-2">
+                {DAYS.map(day => {
+                  const dayData = scheduleData.find(d => d.dayOfWeek === day);
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => setSelectedDay(day)}
+                      className={`p-4 text-left rounded-lg flex justify-between items-center transition-all ${selectedDay === day ? 'bg-green-50 border border-green-200' : 'hover:bg-slate-50 border border-transparent'}`}
+                    >
+                      <span className={`font-semibold ${selectedDay === day ? 'text-green-800' : 'text-slate-700'}`}>
+                        {day.charAt(0) + day.slice(1).toLowerCase()}
+                      </span>
+                      <div className={`w-10 h-5 rounded-full transition-colors relative ${dayData?.isAvailable ? "bg-green-500" : "bg-slate-300"}`}>
+                        <div className={`absolute top-0 w-5 h-5 bg-white rounded-full shadow transition-transform ${dayData?.isAvailable ? "translate-x-5" : "translate-x-0"}`} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* RIGHT COLUMN: Timing details for Selected Day */}
+              <div className="w-full lg:w-2/3 bg-white border border-slate-200 shadow-sm rounded-xl p-6">
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                  <h3 className="text-xl font-bold text-slate-900 capitalize">
+                    Timings for {selectedDay.charAt(0) + selectedDay.slice(1).toLowerCase()}
+                  </h3>
+                  <div
+                    className="flex items-center gap-2 cursor-pointer"
+                    onClick={() => {
+                      setScheduleData(prev => prev.map(item =>
+                        item.dayOfWeek === selectedDay ? { ...item, isAvailable: !item.isAvailable } : item
+                      ));
+                    }}
+                  >
+                    <span className="text-sm font-medium text-slate-600">
+                      {scheduleData.find(d => d.dayOfWeek === selectedDay)?.isAvailable ? "Available" : "Off"}
+                    </span>
+                  </div>
+                </div>
+
+                {scheduleData.find(d => d.dayOfWeek === selectedDay)?.isAvailable ? (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">Start Time</label>
+                        <input
+                          type="time"
+                          value={scheduleData.find(d => d.dayOfWeek === selectedDay)?.startTime || '09:00'}
+                          onChange={(e) => setScheduleData(prev => prev.map(item => item.dayOfWeek === selectedDay ? { ...item, startTime: e.target.value } : item))}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-slate-700 mb-1 block">End Time</label>
+                        <input
+                          type="time"
+                          value={scheduleData.find(d => d.dayOfWeek === selectedDay)?.endTime || '17:00'}
+                          onChange={(e) => setScheduleData(prev => prev.map(item => item.dayOfWeek === selectedDay ? { ...item, endTime: e.target.value } : item))}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">Slot Duration (mins)</label>
+                      <select
+                        value={scheduleData.find(d => d.dayOfWeek === selectedDay)?.slotDuration || 60}
+                        onChange={(e) => setScheduleData(prev => prev.map(item => item.dayOfWeek === selectedDay ? { ...item, slotDuration: Number(e.target.value) } : item))}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      >
+                        <option value={30}>30 minutes</option>
+                        <option value={45}>45 minutes</option>
+                        <option value={60}>60 minutes</option>
+                        <option value={90}>90 minutes</option>
+                      </select>
+                    </div>
+                    <div className="pt-4">
+                      <button
+                        onClick={handleSaveDay}
+                        disabled={savingSchedule}
+                        className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg text-sm font-bold shadow hover:shadow-md transition-all disabled:opacity-50"
+                      >
+                        {savingSchedule ? "Saving..." : "Save Timing"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-slate-500 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-4xl mb-3">🛌</p>
+                    <p className="font-medium text-slate-700">You are marked as away</p>
+                    <p className="text-sm mt-1">Toggle availability above to accept bookings on this day</p>
+                    <div className="pt-6">
+                      <button
+                        onClick={handleSaveDay}
+                        disabled={savingSchedule}
+                        className="px-6 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-semibold transition-all shadow-sm"
+                      >
+                        {savingSchedule ? "Saving..." : "Save Settings"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

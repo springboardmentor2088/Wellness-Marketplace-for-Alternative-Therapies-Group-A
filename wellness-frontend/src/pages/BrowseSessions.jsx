@@ -4,6 +4,7 @@ import { getAccessToken } from '../services/authService';
 import { getVerifiedPractitioners } from '../services/userService';
 import SessionCalendar from '../components/SessionCalendar';
 import BookingForm from '../components/BookingForm';
+import { getPractitionerReviews } from '../services/reviewService';
 import toast from 'react-hot-toast';
 
 const SPECIALIZATIONS = ['All', 'Ayurveda', 'Physiotherapy', 'Yoga Therapy', 'Naturopathy', 'Meditation', 'Nutrition'];
@@ -17,6 +18,8 @@ export default function BrowseSessions() {
   const [selectedPractitioner, setSelectedPractitioner] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [showBookingForm, setShowBookingForm] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -39,6 +42,16 @@ export default function BrowseSessions() {
   const handleSlotSelect = (slot) => {
     setSelectedSlot(slot);
   };
+
+  // Load reviews when practitioner is selected
+  useEffect(() => {
+    if (!selectedPractitioner) { setReviews([]); return; }
+    setReviewsLoading(true);
+    getPractitionerReviews(selectedPractitioner.id)
+      .then(data => setReviews(data))
+      .catch(() => setReviews([]))
+      .finally(() => setReviewsLoading(false));
+  }, [selectedPractitioner]);
 
   const handleConfirmBooking = () => {
     if (!selectedSlot) {
@@ -93,11 +106,10 @@ export default function BrowseSessions() {
             <button
               key={s}
               onClick={() => setSpecFilter(s)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                specFilter === s
+              className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${specFilter === s
                   ? 'bg-teal-600 text-white shadow-md'
                   : 'bg-white border border-slate-200 text-slate-600 hover:border-teal-300 hover:text-teal-700'
-              }`}
+                }`}
             >
               {s}
             </button>
@@ -136,11 +148,10 @@ export default function BrowseSessions() {
                       setSelectedPractitioner(p);
                       setSelectedSlot(null);
                     }}
-                    className={`bg-white rounded-2xl border-2 p-5 cursor-pointer transition-all hover:shadow-lg ${
-                      selectedPractitioner?.id === p.id
+                    className={`bg-white rounded-2xl border-2 p-5 cursor-pointer transition-all hover:shadow-lg ${selectedPractitioner?.id === p.id
                         ? 'border-teal-500 shadow-lg shadow-teal-100/50'
                         : 'border-transparent shadow-sm hover:border-teal-200'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-4">
                       <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-teal-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
@@ -230,6 +241,40 @@ export default function BrowseSessions() {
                       </button>
                     </div>
                   )}
+
+                  {/* Reviews Section */}
+                  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      ⭐ Reviews
+                      {reviews.length > 0 && (
+                        <span className="text-xs font-normal text-slate-500">({reviews.length})</span>
+                      )}
+                    </h3>
+                    {reviewsLoading ? (
+                      <p className="text-sm text-slate-400">Loading reviews...</p>
+                    ) : reviews.length === 0 ? (
+                      <p className="text-sm text-slate-400">No reviews yet</p>
+                    ) : (
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {reviews.map(review => (
+                          <div key={review.id} className="border-b border-slate-100 pb-3 last:border-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-semibold text-slate-800">{review.userName}</span>
+                              <span className="text-xs text-amber-500 font-semibold">
+                                {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                              </span>
+                            </div>
+                            {review.comment && (
+                              <p className="text-xs text-slate-600 leading-relaxed">{review.comment}</p>
+                            )}
+                            <p className="text-xs text-slate-400 mt-1">
+                              {new Date(review.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -242,6 +287,7 @@ export default function BrowseSessions() {
         <BookingForm
           practitionerId={selectedPractitioner.id}
           practitionerName={selectedPractitioner.userName}
+          consultationFee={selectedPractitioner.consultationFee}
           selectedSlot={selectedSlot}
           onSuccess={() => {
             toast.success('Session booked successfully!');

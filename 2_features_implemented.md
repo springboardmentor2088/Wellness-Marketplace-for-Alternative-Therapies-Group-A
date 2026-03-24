@@ -36,7 +36,9 @@ Full JWT-based auth with register, OTP email verification, login, session refres
 - `Register.jsx` → submits form → redirects to `VerifyEmail.jsx`
 - `VerifyEmail.jsx` → OTP input + resend → on success, stores auth data and navigates directly to role-based dashboard
 - `Login.jsx`, `ForgotPassword.jsx`, `ResetPassword.jsx`
+- `UserProfile.jsx` — Patients and practitioners can update their profile information.
 - `authService.js` — all HTTP calls + `storeAuthData()` dispatches `window.dispatchEvent(new Event('authChange'))` to trigger same-tab notification init
+- `userService.js` — `updateUser()` handles profile updates.
 
 ---
 
@@ -62,6 +64,7 @@ Practitioners create and manage their professional profiles. Admins verify them.
 | `PUT /api/practitioners/{id}/verify` | PUT | ADMIN | Toggle verified flag |
 | `GET /api/practitioners/search?specialization=` | GET | Public | Filter by specialization |
 | `POST /api/practitioners/{id}/documents/upload` | POST | PRACTITIONER | Upload credentials (PDF/images) |
+| `PUT /api/sessions/{id}/complete` | PUT | PRACTITIONER | **Mandatory** document upload to complete session |
 | `GET /api/practitioners/{id}/documents` | GET | ADMIN | View uploaded docs |
 | `GET /api/practitioners/me/documents` | GET | PRACTITIONER | View own docs |
 | `GET /api/practitioners/documents/{id}/download` | GET | PRACTITIONER/ADMIN | Stream file |
@@ -111,12 +114,14 @@ Patients book time slots with practitioners. Sessions can be cancelled or resche
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `POST /api/sessions/book` | POST | Create booking (practitionerId, date, startTime, type, notes) |
-| `PUT /api/sessions/{id}/cancel` | PUT | Cancel with reason + who cancelled |
+| `POST /api/sessions/book` | POST | Create booking (status: HOLD, payment: PENDING) |
+| `PUT /api/sessions/{id}/cancel` | PUT | Cancel with reason + refund trigger |
 | `PUT /api/sessions/{id}/reschedule` | PUT | Reschedule to new date/time |
 | `GET /api/sessions/user/{userId}` | GET | All sessions for a patient |
-| `GET /api/sessions/practitioner/{id}` | GET | All sessions for a practitioner |
+| `GET /api/sessions/practitioner/{id}` | GET | All sessions for a practitioner (Only PAID) |
 | `GET /api/sessions/{id}/slots?date=` | GET | Free slots on a given date |
+| `POST /api/payments/initiate` | POST | Initialize Razorpay Order |
+| `POST /api/payments/webhook` | POST | Verify Signature & Confirm Booking |
 
 **Overlap / Double-booking Prevention:**
 - Practitioner overlap check: no two BOOKED sessions can overlap in time
@@ -229,6 +234,31 @@ Users and practitioners receive in-app notifications for session events: booking
 - `websocketService.js` — STOMP client with `isConnecting` guard to prevent concurrent connection race conditions
 
 **Key fix applied:** `receiverId` in DB is stored as `user.id` (not `practitioner_profile.id`) so the `NotificationController` can query correctly using `currentUser.getId()`.
+**Real-time Sync:** Dashboard counts (bookings, earnings) are auto-refreshed via WebSocket triggers (PAYMENT_RECEIVED, SESSION_BOOKED).
+
+---
+
+## Feature 13: Razorpay Payment Integration
+
+### What it does
+Replaced mock payments with a real-time Razorpay flow. Supports order creation, live signature verification (HMAC SHA256), and automated booking confirmation upon payment success.
+
+### How it works
+- **Backend:** `RazorpayPaymentGateway` implements `PaymentGateway`. Uses Razorpay Java SDK for `client.orders.create()` and `Utils.verifyPaymentSignature()`.
+- **Frontend:** Includes `checkout.js`. `SessionCard.jsx` opens the Razorpay modal.
+- **Security:** Strict server-side verification of `razorpay_signature` before flipping status to `BOOKED`.
+
+---
+
+## Feature 14: Practitioner Earnings System
+
+### What it does
+Tracks session-wise earnings for practitioners. Different logic for "Pending" (completed but not paid out) and "Ready for Payout" (payout eligible).
+
+### How it works
+- **Logic:** `DoctorEarningController` calculates totals based on `DoctorEarning` table.
+- **Trigger:** Completing a session (with mandatory doc) creates an earning record.
+- **Frontend:** Earnings tab on Practitioner Dashboard updates in real-time.
 
 ---
 
@@ -252,6 +282,7 @@ Provides real-time push updates to patients and practitioners for session change
 
 **Frontend (`websocketService.js`):**
 - `isConnecting` flag prevents concurrent connection attempts (race condition fix)
+- **Native Implementation:** Removed `sockjs-client` in favor of standard browser `WebSocket` for better stability.
 - Single STOMP client shared across subscriptions
 - `disconnectWebSocket()` unsubscribes all topics and resets flags
 - Practitioners auto-subscribe to `/topic/practitioner/{userId}` in `NotificationContext` after login
@@ -332,3 +363,114 @@ Centralized panel for the admin to manage all platform entities.
 - `AdminDashboard.jsx` — multi-tab dashboard
 - Tabs: Users list, Practitioners (verify/reject), Orders management, Practitioner requests overview
 - All calls protected by `AdminRoute` wrapper
+ 
+ ---
+ 
+ ## Feature 15: Community Forum
+ 
+ ### What it does
+ A robust Q&A and discussion system where patients can ask wellness-related questions, and practitioners/admins can provide expert answers. Supports likes, accepted solutions, comments, and a reporting system for moderation.
+ 
+ ### How it works
+ 
+ **Backend:**
+ - `ForumController` → `/api/forum/**`
+ - `ForumService` handles threads, answers, likes, comments, and reports.
+ - `Thread`, `Answer`, `Comment`, `AnswerLike`, `AnswerReport` models.
+ 
+ | Endpoint | Method | Description |
+ |---|---|---|
+ | `POST /api/forum/threads` | POST | Create a new discussion thread |
+ | `GET /api/forum/threads` | GET | List all threads (paginated, optional category filter) |
+ | `GET /api/forum/threads/{id}` | GET | Get thread details with all answers and comments |
+ | `POST /api/forum/threads/{id}/answers` | POST | Practitioners/Admins add an answer |
+ | `POST /api/forum/answers/{id}/like` | POST | Like an answer |
+ | `PUT /api/forum/answers/{id}/accept` | PUT | Mark an answer as the accepted solution |
+ | `POST /api/forum/answers/{id}/comments` | POST | Add a comment to an answer |
+ | `POST /api/forum/answers/{id}/report` | POST | Report an answer for moderation |
+ | `GET /api/forum/reports` | GET | (Admin) View all reported answers |
+ 
+ **Frontend:**
+ - `CommunityForum.jsx` — Browse threads, search, filter by category.
+ - `ForumThreadDetail.jsx` — View thread, post answers/comments, like/accept solutions.
+ - `forumService.js` — All API calls for the forum.
+ 
+ ---
+ 
+ ## Feature 16: Product & Session Reviews
+ 
+ ### What it does
+ Users can leave reviews and ratings for both products they've purchased and practitioners they've had sessions with.
+ 
+ ### How it works
+ 
+ **Backend:**
+ - `ProductReviewController` → `/api/product-reviews/**`
+ - `ReviewController` → `/api/reviews/**` (for Practitioner sessions)
+ 
+ | Endpoint | Method | Description |
+ |---|---|---|
+ | `POST /api/product-reviews` | POST | Submit product review (1-5 star + comment) |
+ | `GET /api/product-reviews/{productId}` | GET | Get all reviews + average rating for a product |
+ | `POST /api/reviews` | POST | Submit practitioner review linked to a specific `sessionId` |
+ | `GET /api/reviews/practitioner/{id}` | GET | Get all reviews for a practitioner |
+
+**Session Reviews Logic:**
+- Each review is linked to a unique `TherapySession`.
+- Multiple reviews for the same practitioner are allowed as long as they belong to different completed sessions.
+- The "Leave Review" button is automatically hidden once a session has been reviewed.
+ 
+ **Frontend:**
+ - Included in `UserDashboard.jsx`, `MyBookings.jsx`, and `SessionCard.jsx`.
+ - `ReviewForm.jsx` handles state and submission logic, passing the `sessionId` to the backend.
+ - `reviewService.js` manages API calls for both products and practitioners.
+ 
+ ---
+ 
+ ## Feature 17: Server-side Cart Management
+ 
+ ### What it does
+ Replaced local-only cart with a server-side persistent cart, allowing users to keep their items across different devices and sessions.
+ 
+ ### How it works
+ 
+ **Backend:**
+ - `CartController` → `/api/cart/**`
+ - `CartService` manages `CartItem` entities linked to the user.
+ 
+ | Endpoint | Method | Description |
+ |---|---|---|
+ | `GET /api/cart` | GET | Fetch all items in the user's cart |
+ | `POST /api/cart/add` | POST | Add a product to the cart |
+ | `PUT /api/cart/{productId}/update` | PUT | Update quantity of a cart item |
+ | `DELETE /api/cart/{productId}/remove` | DELETE | Remove item from cart |
+ | `DELETE /api/cart/clear` | DELETE | Empty the entire cart |
+ 
+ **Frontend:**
+ - `orderService.js` now uses these API endpoints instead of just `localStorage`.
+ - `Cart.jsx` UI remains consistent but syncs with the database.
+ 
+ ---
+ 
+ ## Feature 18: Enhanced Wallet & Transactions
+ 
+ ### What it does
+ A complete digital wallet system for users and practitioners. Supports deposits, withdrawals, and a detailed transaction ledger.
+ 
+ ### How it works
+ 
+ **Backend:**
+ - `WalletController` → `/api/wallet/**`
+ - `WalletService` handles balance updates and transaction logging.
+ - `UserWallet` and `WalletTransaction` models.
+ 
+ | Endpoint | Method | Description |
+ |---|---|---|
+ | `GET /api/wallet/balance` | GET | Get current wallet balance |
+ | `GET /api/wallet/transactions` | GET | Get paginated transaction history |
+ | `POST /api/wallet/deposit` | POST | Add funds to wallet |
+ | `POST /api/wallet/withdraw` | POST | Request withdrawal of funds |
+ 
+ **Frontend:**
+ - `WalletPage.jsx` — View balance, deposit/withdraw, see transaction history.
+ - `walletService.js` — All API integrations for wallet.

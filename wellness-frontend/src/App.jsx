@@ -15,6 +15,8 @@ import BrowseSessions from "./pages/BrowseSessions.jsx";
 import MyBookings from "./pages/MyBookings.jsx";
 import Unauthorized from "./pages/Unauthorized.jsx";
 import VerifyEmail from "./pages/VerifyEmail.jsx";
+import CommunityForum from "./pages/CommunityForum.jsx";
+import ForumThreadDetail from "./pages/ForumThreadDetail.jsx";
 import { AdminRoute, PractitionerRoute } from "./components/RoleBasedRoute.jsx";
 import { NotificationProvider } from "./context/NotificationContext.jsx";
 
@@ -70,6 +72,10 @@ function App() {
           <Route path="/products" element={<ProductMarketplace />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/user/orders" element={<OrderHistory />} />
+
+          {/* Social / Community */}
+          <Route path="/community-forum" element={<CommunityForum />} />
+          <Route path="/community-forum/:id" element={<ForumThreadDetail />} />
 
           {/* Fallback Route */}
           <Route path="*" element={<Navigate to="/" replace />} />

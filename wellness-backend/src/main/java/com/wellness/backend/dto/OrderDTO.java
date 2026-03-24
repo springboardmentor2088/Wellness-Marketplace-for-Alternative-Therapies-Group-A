@@ -1,5 +1,6 @@
 package com.wellness.backend.dto;
 
+import com.wellness.backend.enums.PaymentStatus;
 import com.wellness.backend.model.Order;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -19,11 +20,19 @@ public class OrderDTO {
 
     private Order.OrderStatus status;
 
-    private Order.PaymentStatus paymentStatus;
+    private PaymentStatus paymentStatus;
 
     private LocalDateTime orderDate;
 
     private LocalDateTime updatedAt;
+
+    private String deliveryAddress;
+
+    private LocalDateTime estimatedDeliveryDate;
+
+    private String trackingNumber;
+
+    private String courierPartner;
 
     @Valid
     @NotEmpty(message = "Order must contain at least one item")
@@ -32,7 +41,7 @@ public class OrderDTO {
     // Constructors
     public OrderDTO() {}
 
-    public OrderDTO(Integer id, Integer userId, BigDecimal totalAmount, Order.OrderStatus status, Order.PaymentStatus paymentStatus, LocalDateTime orderDate) {
+    public OrderDTO(Integer id, Integer userId, BigDecimal totalAmount, Order.OrderStatus status, PaymentStatus paymentStatus, LocalDateTime orderDate) {
         this.id = id;
         this.userId = userId;
         this.totalAmount = totalAmount;
@@ -74,11 +83,11 @@ public class OrderDTO {
         this.status = status;
     }
 
-    public Order.PaymentStatus getPaymentStatus() {
+    public PaymentStatus getPaymentStatus() {
         return paymentStatus;
     }
 
-    public void setPaymentStatus(Order.PaymentStatus paymentStatus) {
+    public void setPaymentStatus(PaymentStatus paymentStatus) {
         this.paymentStatus = paymentStatus;
     }
 
@@ -96,6 +105,38 @@ public class OrderDTO {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getDeliveryAddress() {
+        return deliveryAddress;
+    }
+
+    public void setDeliveryAddress(String deliveryAddress) {
+        this.deliveryAddress = deliveryAddress;
+    }
+
+    public LocalDateTime getEstimatedDeliveryDate() {
+        return estimatedDeliveryDate;
+    }
+
+    public void setEstimatedDeliveryDate(LocalDateTime estimatedDeliveryDate) {
+        this.estimatedDeliveryDate = estimatedDeliveryDate;
+    }
+
+    public String getTrackingNumber() {
+        return trackingNumber;
+    }
+
+    public void setTrackingNumber(String trackingNumber) {
+        this.trackingNumber = trackingNumber;
+    }
+
+    public String getCourierPartner() {
+        return courierPartner;
+    }
+
+    public void setCourierPartner(String courierPartner) {
+        this.courierPartner = courierPartner;
     }
 
     public List<OrderItemDTO> getItems() {

@@ -2,7 +2,6 @@
 // WEBSOCKET SERVICE - Real-time Notifications
 // ============================================
 
-import SockJS from "sockjs-client";
 import Stomp from "stompjs";
 
 let stompClient = null;
@@ -10,7 +9,7 @@ let isConnected = false;
 let isConnecting = false;
 let subscriptions = {};
 
-const API_WS = "http://localhost:8081/ws";
+const API_WS = "ws://localhost:8081/ws";
 
 // ---- Initialize WebSocket Connection ----
 export const connectWebSocket = (userId, onMessageReceived) => {
@@ -27,7 +26,9 @@ export const connectWebSocket = (userId, onMessageReceived) => {
     }
 
     isConnecting = true;
-    const socket = new SockJS(API_WS);
+
+    // Connect natively via WebSocket protocol
+    const socket = new WebSocket(API_WS);
     stompClient = Stomp.over(socket);
 
     stompClient.connect(

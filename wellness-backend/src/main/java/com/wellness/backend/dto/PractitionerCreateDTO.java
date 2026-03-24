@@ -1,15 +1,17 @@
 package com.wellness.backend.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import java.math.BigDecimal;
 
 public class PractitionerCreateDTO {
-    
+
     @NotBlank(message = "Specialization is required")
     private String specialization;
-    
+
     private String qualifications;
     private String experience;
     private String bio;
+    private BigDecimal consultationFee;
 
     // Getters and Setters
     public String getSpecialization() {
@@ -42,5 +44,13 @@ public class PractitionerCreateDTO {
 
     public void setBio(String bio) {
         this.bio = bio;
+    }
+
+    public BigDecimal getConsultationFee() {
+        return consultationFee;
+    }
+
+    public void setConsultationFee(BigDecimal consultationFee) {
+        this.consultationFee = consultationFee;
     }
 }

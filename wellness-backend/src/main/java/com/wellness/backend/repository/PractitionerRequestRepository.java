@@ -1,5 +1,7 @@
 package com.wellness.backend.repository;
 
+import com.wellness.backend.enums.RequestPriority;
+import com.wellness.backend.enums.RequestStatus;
 import com.wellness.backend.model.PractitionerRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -21,11 +23,11 @@ public interface PractitionerRequestRepository extends JpaRepository<Practitione
 
     // Get requests by status for a specific practitioner (latest first)
     @Query("SELECT pr FROM PractitionerRequest pr WHERE pr.practitioner.id = :practitionerId AND pr.status = :status ORDER BY pr.createdAt DESC")
-    List<PractitionerRequest> findByPractitionerIdAndStatus(@Param("practitionerId") Integer practitionerId, @Param("status") String status);
+    List<PractitionerRequest> findByPractitionerIdAndStatus(@Param("practitionerId") Integer practitionerId, @Param("status") RequestStatus status);
 
     // Get requests by priority for a specific practitioner (latest first)
     @Query("SELECT pr FROM PractitionerRequest pr WHERE pr.practitioner.id = :practitionerId AND pr.priority = :priority ORDER BY pr.createdAt DESC")
-    List<PractitionerRequest> findByPractitionerIdAndPriority(@Param("practitionerId") Integer practitionerId, @Param("priority") String priority);
+    List<PractitionerRequest> findByPractitionerIdAndPriority(@Param("practitionerId") Integer practitionerId, @Param("priority") RequestPriority priority);
 
     // Get all requests for a user
     @Query("SELECT pr FROM PractitionerRequest pr WHERE pr.user.id = :userId ORDER BY pr.createdAt DESC")

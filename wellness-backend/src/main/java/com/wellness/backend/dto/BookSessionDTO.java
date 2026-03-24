@@ -1,6 +1,6 @@
 package com.wellness.backend.dto;
 
-import com.wellness.backend.model.TherapySession;
+import com.wellness.backend.enums.SessionType;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -16,7 +16,7 @@ public class BookSessionDTO {
     @NotNull(message = "Start time is required")
     private LocalTime startTime;
 
-    private TherapySession.SessionType sessionType = TherapySession.SessionType.ONLINE;
+    private SessionType sessionTypeSlice = SessionType.ONLINE;
 
     private String notes;
 
@@ -45,12 +45,12 @@ public class BookSessionDTO {
         this.startTime = startTime;
     }
 
-    public TherapySession.SessionType getSessionType() {
-        return sessionType;
+    public SessionType getSessionType() {
+        return sessionTypeSlice;
     }
 
-    public void setSessionType(TherapySession.SessionType sessionType) {
-        this.sessionType = sessionType;
+    public void setSessionType(SessionType sessionType) {
+        this.sessionTypeSlice = sessionType;
     }
 
     public String getNotes() {
