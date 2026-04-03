@@ -44,6 +44,11 @@ export default function AdminDashboard() {
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(true);
 
+  // Seller Onboarding State
+  const [pendingSellers, setPendingSellers] = useState([]);
+  const [pendingProducts, setPendingProducts] = useState([]);
+  const [loadingModeration, setLoadingModeration] = useState(false);
+
   useEffect(() => {
     fetchPractitioners();
     fetchSessions();
@@ -53,10 +58,12 @@ export default function AdminDashboard() {
 
     // Real-time polling
     const intervalId = setInterval(() => {
-      if (activeTab === "products") fetchProducts();
+      if (activeTab === "products" || activeTab === "product-review") fetchProducts();
       if (activeTab === "orders") fetchOrders();
       if (activeTab === "sessions") fetchSessions();
       if (activeTab === "reports") fetchReports();
+      if (activeTab === "merchants") fetchPendingSellers();
+      if (activeTab === "product-review") fetchPendingProducts();
     }, 10000);
 
     const handleFocus = () => {
@@ -162,6 +169,22 @@ export default function AdminDashboard() {
     } finally {
       setReportsLoading(false);
     }
+  };
+
+  const fetchPendingSellers = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await axios.get("/api/admin/moderation/sellers/pending", { headers: { Authorization: `Bearer ${token}` } });
+      setPendingSellers(res.data);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchPendingProducts = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      const res = await axios.get("/api/admin/moderation/products/pending", { headers: { Authorization: `Bearer ${token}` } });
+      setPendingProducts(res.data);
+    } catch (err) { console.error(err); }
   };
 
   const handleResolveReport = async (reportId) => {
@@ -280,6 +303,42 @@ export default function AdminDashboard() {
     }
   };
 
+  // --- Seller/Product Moderation Logic ---
+  const handleApproveSeller = async (id) => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      await axios.put(`/api/admin/moderation/sellers/${id}/approve`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      fetchPendingSellers();
+      alert("Seller Approved!");
+    } catch (err) { alert("Failed to approve seller"); }
+  };
+
+  const handleModerateProduct = async (id, status) => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      await axios.put(`/api/admin/moderation/products/${id}/status`, {}, { 
+        params: { status },
+        headers: { Authorization: `Bearer ${token}` } 
+      });
+      fetchPendingProducts();
+      fetchProducts();
+      alert(`Product ${status.toLowerCase()}!`);
+    } catch (err) { alert("Failed to moderate product"); }
+  };
+
+  const handleUpdateStock = async (id, newStock) => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      await axios.put(`/api/admin/moderation/products/${id}/stock`, {}, { 
+        params: { stock: newStock },
+        headers: { Authorization: `Bearer ${token}` } 
+      });
+      fetchProducts();
+      fetchPendingProducts();
+      toast.success("Stock updated!");
+    } catch (err) { alert("Failed to update stock"); }
+  };
+
   // --- UI Helpers ---
   const handleLogout = () => {
     localStorage.removeItem("adminLoggedIn");
@@ -326,20 +385,26 @@ export default function AdminDashboard() {
         
         {/* Tab Navigation */}
         <div className="flex space-x-1 bg-gray-200 p-1 rounded-lg mb-8 shadow-inner overflow-x-auto">
-          {["practitioners", "sessions", "products", "orders", "reports"].map((tab) => (
+          {["practitioners", "merchants", "sessions", "product-review", "products", "orders", "reports"].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                if (tab === "merchants") fetchPendingSellers();
+                if (tab === "product-review") fetchPendingProducts();
+              }}
               className={`flex-1 py-3 px-6 text-sm font-bold rounded-md capitalize transition-all whitespace-nowrap ${
                 activeTab === tab
                   ? "bg-white text-[#1f6f66] shadow-sm transform scale-[1.02]"
                   : "text-gray-600 hover:bg-gray-300 hover:text-gray-900"
               }`}
             >
-              {tab === "practitioners" && "Practitioner Approvals"}
-              {tab === "sessions" && "Patient Requests & Sessions"}
-              {tab === "products" && "Product Management"}
-              {tab === "orders" && "Product Requests"}
+              {tab === "practitioners" && "Doctor Vetting"}
+              {tab === "merchants" && `Sellers Review${pendingSellers.length > 0 ? ` (${pendingSellers.length})` : ''}`}
+              {tab === "sessions" && "Clinical Sessions"}
+              {tab === "product-review" && `Inventory Review${pendingProducts.length > 0 ? ` (${pendingProducts.length})` : ''}`}
+              {tab === "products" && "All Products"}
+              {tab === "orders" && "Sales Orders"}
               {tab === "reports" && `Forum Reports${reports.filter(r => !r.resolved).length > 0 ? ` (${reports.filter(r => !r.resolved).length})` : ''}`}
             </button>
           ))}
@@ -420,6 +485,82 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* TAB: MERCHANT VERIFICATIONS */}
+          {activeTab === "merchants" && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-800">Pharmaceutical Seller Applications</h2>
+              <div className="grid grid-cols-1 gap-4">
+                {pendingSellers.length === 0 ? <p className="text-gray-400">No pending seller applications.</p> :
+                  pendingSellers.map(s => (
+                    <div key={s.id} className="bg-gray-50 border p-6 rounded-2xl flex flex-col md:flex-row justify-between gap-6">
+                      <div className="space-y-2">
+                        <h3 className="text-xl font-bold text-slate-900">{s.organizationName}</h3>
+                        <p className="text-sm font-mono bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded inline-block">DL NO: {s.drugLicenseNumber}</p>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-1 pt-2">
+                          <p className="text-xs font-bold text-gray-400">Pharmacist: <span className="text-gray-700">{s.pharmacistName}</span></p>
+                          <p className="text-xs font-bold text-gray-400">Reg #: <span className="text-gray-700">{s.pharmacistRegNum}</span></p>
+                          <p className="text-xs font-bold text-gray-400">GST: <span className="text-gray-700">{s.gstTaxId}</span></p>
+                          <p className="text-xs font-bold text-gray-400">IEC: <span className="text-gray-700">{s.iecCode}</span></p>
+                        </div>
+                        <div className="flex gap-4 pt-3">
+                          {s.gmpCertificationUrl && <a href={`/api/admin/download?path=${s.gmpCertificationUrl}`} className="text-xs text-blue-600 underline">View GMP</a>}
+                          {s.smfUrl && <a href={`/api/admin/download?path=${s.smfUrl}`} className="text-xs text-blue-600 underline">View SMF</a>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <button onClick={() => handleApproveSeller(s.id)} className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold">Approve Seller</button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
+          {/* TAB: PRODUCT REVIEW QUEUE */}
+          {activeTab === "product-review" && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-800">New Product Submissions</h2>
+              <div className="grid grid-cols-1 gap-6">
+                {pendingProducts.length === 0 ? <p className="text-gray-400">No products waiting for review.</p> :
+                  pendingProducts.map(p => (
+                    <div key={p.id} className="bg-white border p-6 rounded-2xl shadow-sm flex flex-col md:flex-row gap-6">
+                      <div className="w-32 h-32 space-y-2">
+                        <div className="w-full h-1/2 bg-gray-100 rounded overflow-hidden">
+                          {p.imageUrl && <img src={p.imageUrl} className="w-full h-full object-cover" />}
+                        </div>
+                        <div className="w-full h-1/2 bg-gray-100 rounded overflow-hidden">
+                          {p.imageUrl2 && <img src={p.imageUrl2} className="w-full h-full object-cover" />}
+                        </div>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex justify-between">
+                          <h3 className="text-xl font-bold">{p.name}</h3>
+                          <span className="text-indigo-600 font-bold">₹{p.price}</span>
+                        </div>
+                        <p className="text-sm font-bold text-gray-400 uppercase">{p.category} | {p.activeIngredient}</p>
+                        <p className="text-sm text-gray-600">{p.description}</p>
+                        <div className="pt-2 flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-400">Adjust Stock Content:</span>
+                            <input 
+                                type="number" 
+                                defaultValue={p.stock} 
+                                onBlur={(e) => handleUpdateStock(p.id, parseInt(e.target.value))}
+                                className="w-20 border px-2 py-1 rounded text-sm font-bold"
+                            />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2 justify-center">
+                        <button onClick={() => handleModerateProduct(p.id, 'ACTIVE')} className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold">Approve & Live</button>
+                        <button onClick={() => handleModerateProduct(p.id, 'REJECTED')} className="bg-red-50 text-red-600 px-6 py-2 rounded-lg font-bold border border-red-100 italic">Reject</button>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
           {/* TAB 2: PATIENT REQUESTS & SESSIONS */}
           {activeTab === "sessions" && (
             <div>
@@ -496,7 +637,15 @@ export default function AdminDashboard() {
                           <td className="p-4 text-gray-600">{p.category}</td>
                           <td className="p-4 font-bold text-[#1f6f66]">₹{p.price}</td>
                           <td className="p-4">
-                            <span className={`px-2 py-1 text-xs font-bold rounded-full ${p.stock > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{p.stock} units</span>
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    type="number" 
+                                    defaultValue={p.stock} 
+                                    onBlur={(e) => handleUpdateStock(p.id, parseInt(e.target.value))}
+                                    className="w-16 border px-1 py-0.5 rounded text-xs font-bold"
+                                />
+                                <span className={`px-2 py-1 text-[10px] font-extrabold rounded-full ${p.stock > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>UNITS</span>
+                            </div>
                           </td>
                           <td className="p-4 text-right space-x-3">
                             <button onClick={() => openEditProduct(p)} className="text-blue-600 font-bold text-sm hover:underline">Edit</button>

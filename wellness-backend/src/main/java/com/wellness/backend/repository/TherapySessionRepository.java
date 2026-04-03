@@ -2,6 +2,7 @@ package com.wellness.backend.repository;
 
 import com.wellness.backend.enums.SessionStatus;
 import com.wellness.backend.model.TherapySession;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,12 +16,16 @@ import java.util.Optional;
 @Repository
 public interface TherapySessionRepository extends JpaRepository<TherapySession, Integer> {
 
+        @EntityGraph(attributePaths = {"user", "practitioner"})
         List<TherapySession> findAllByOrderBySessionDateDescStartTimeDesc();
 
         List<TherapySession> findByStatusAndCreatedAtBefore(SessionStatus status,
                         java.time.LocalDateTime createdAt);
+        
+        @EntityGraph(attributePaths = {"user", "practitioner"})
         List<TherapySession> findByUser_IdOrderBySessionDateAscStartTimeAsc(Integer userId);
 
+        @EntityGraph(attributePaths = {"user", "practitioner"})
         List<TherapySession> findByPractitioner_IdOrderBySessionDateAscStartTimeAsc(Integer practitionerId);
 
         Optional<TherapySession> findByPractitioner_IdAndSessionDateAndStartTime(
@@ -52,6 +57,16 @@ public interface TherapySessionRepository extends JpaRepository<TherapySession, 
                         @Param("endTime") LocalTime endTime);
 
         // ================= Active Sessions For Slot Calculation =================
+        @EntityGraph(attributePaths = {"user", "practitioner"})
+        List<TherapySession> findByPractitioner_IdAndSessionDateAndStatusNot(
+                        Integer practitionerId, LocalDate sessionDate, SessionStatus status);
+
+        // ================= Practitioner History Filters =================
+        @EntityGraph(attributePaths = {"user"})
+        List<TherapySession> findByPractitioner_IdAndPrescribedDocumentUrlIsNotNullOrderBySessionDateDescStartTimeDesc(Integer practitionerId);
+
+        @EntityGraph(attributePaths = {"user"})
+        List<TherapySession> findByPractitioner_IdAndPatientDocumentUrlIsNotNullOrderBySessionDateDescStartTimeDesc(Integer practitionerId);
         @Query("SELECT s FROM TherapySession s WHERE s.practitioner.id = :practitionerId " +
                         "AND s.sessionDate = :sessionDate " +
                         "AND s.status != 'CANCELLED'")
@@ -87,4 +102,13 @@ public interface TherapySessionRepository extends JpaRepository<TherapySession, 
                         @Param("practitionerId") Integer practitionerId);
 
         long countByPractitioner_IdAndStatus(Integer practitionerId, SessionStatus status);
+
+    // Analytics
+    long countByStatus(SessionStatus status);
+
+    @Query(value = "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COUNT(*) FROM therapy_session GROUP BY month ORDER BY month", nativeQuery = true)
+    List<Object[]> countSessionsGroupedByMonth();
+
+    @Query("SELECT COALESCE(SUM(s.feeAmount), 0) FROM TherapySession s WHERE s.paymentStatus = com.wellness.backend.enums.PaymentStatus.PAID")
+    java.math.BigDecimal sumPaidSessionRevenue();
 }

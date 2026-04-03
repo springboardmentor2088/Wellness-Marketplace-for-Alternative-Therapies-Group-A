@@ -10,15 +10,19 @@ export default function Register() {
     fullName: '',
     email: '',
     phone: '',
-    password: '',
-    role: 'PATIENT'
+    password: ''
   });
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.phone && formData.phone.length !== 10) {
+      setPhoneError('Phone number must be exactly 10 digits');
+      return;
+    }
     setError("");
     setErrors({});
     setLoading(true);
@@ -29,7 +33,7 @@ export default function Register() {
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim(),
         password: formData.password,
-        role: formData.role,
+        role: 'PATIENT',
         bio: ""
       };
 
@@ -132,14 +136,23 @@ export default function Register() {
                 id="phone"
                 name="phone"
                 type="tel"
-                placeholder="+91 9876543210"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.phone ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                placeholder="Enter 10-digit phone number"
+                maxLength="10"
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${(errors.phone || phoneError) ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
                   }`}
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '');
+                  setFormData({ ...formData, phone: value });
+                  if (value.length > 0 && value.length !== 10) {
+                    setPhoneError('Phone number must be exactly 10 digits');
+                  } else {
+                    setPhoneError('');
+                  }
+                }}
                 required
               />
-              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+              {(errors.phone || phoneError) && <p className="text-red-500 text-xs mt-1">{errors.phone || phoneError}</p>}
             </div>
 
             <div>
@@ -158,30 +171,27 @@ export default function Register() {
                 required
               />
               {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-              {!errors.password && formData.password && formData.password.length > 0 && (
-                <p className="text-gray-500 text-xs mt-1">
-                  {formData.password.length < 6
-                    ? `${6 - formData.password.length} more characters needed`
-                    : '✓ Password length is valid'}
-                </p>
+              {!errors.password && formData.password && (
+                <div className="mt-2 space-y-1">
+                  <p className={`text-xs ${formData.password.length >= 8 ? 'text-green-600' : 'text-gray-500'}`}>
+                    {formData.password.length >= 8 ? '✓' : '○'} At least 8 characters
+                  </p>
+                  <p className={`text-xs ${/[A-Z]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    {/[A-Z]/.test(formData.password) ? '✓' : '○'} One uppercase letter
+                  </p>
+                  <p className={`text-xs ${/[a-z]/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    {/[a-z]/.test(formData.password) ? '✓' : '○'} One lowercase letter
+                  </p>
+                  <p className={`text-xs ${/\d/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    {/\d/.test(formData.password) ? '✓' : '○'} One number
+                  </p>
+                  <p className={`text-xs ${/.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?].*/.test(formData.password) ? 'text-green-600' : 'text-gray-500'}`}>
+                    {/.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?].*/.test(formData.password) ? '✓' : '○'} One special character
+                  </p>
+                </div>
               )}
             </div>
 
-            <div>
-              <label htmlFor="role" className="text-xs font-semibold text-gray-600 tracking-wide">
-                SELECT ROLE
-              </label>
-              <select
-                id="role"
-                name="role"
-                className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              >
-                <option value="PATIENT">Patient/User</option>
-                <option value="PRACTITIONER">Practitioner</option>
-              </select>
-            </div>
 
             <button
               type="submit"

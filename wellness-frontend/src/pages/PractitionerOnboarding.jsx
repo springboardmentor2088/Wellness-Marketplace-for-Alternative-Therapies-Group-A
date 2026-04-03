@@ -173,12 +173,17 @@ export default function PractitionerOnboarding() {
   };
 
   const handleContinueToDashboard = () => {
-    // 1. ✅ UPDATE: Mark onboarding as completed in the main user object
-    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
-    localStorage.setItem("user", JSON.stringify({ ...currentUser, onboardingCompleted: true }));
-
-    localStorage.setItem("practitionerOnboarded", "true");
-    navigate("/practitioner/dashboard");
+    // With the new Professional Upgrade flow, the user's role has changed to PRACTITIONER on the backend.
+    // Their current JWT token is stale (has PATIENT role). So we log them out to force a new login and fetch a fresh token.
+    localStorage.removeItem("user");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("userRole");
+    
+    // Add a toast or you can just rely on the redirect login to show they need to re-login.
+    alert("Application submitted successfully! Please log in again to access your Practitioner Dashboard.");
+    navigate("/login");
   };
 
   return (
@@ -310,11 +315,17 @@ export default function PractitionerOnboarding() {
                       </label>
                       <input
                         type="tel"
-                        placeholder="+1 234 567 8900"
+                        placeholder="Enter 10-digit phone number"
+                        maxLength="10"
                         value={formData.phone}
                         onChange={(e) => {
-                          setFormData({ ...formData, phone: e.target.value });
-                          if (errors.phone) setErrors({ ...errors, phone: null });
+                          const value = e.target.value.replace(/\D/g, '');
+                          setFormData({ ...formData, phone: value });
+                          if (value.length > 0 && value.length !== 10) {
+                            setErrors({ ...errors, phone: 'Phone number must be exactly 10 digits' });
+                          } else {
+                            if (errors.phone) setErrors({ ...errors, phone: null });
+                          }
                         }}
                         className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.phone ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
                           }`}
@@ -367,14 +378,21 @@ export default function PractitionerOnboarding() {
                         required
                       >
                         <option value="">Select Specialization</option>
-                        <option value="Physiotherapy">Physiotherapy</option>
-                        <option value="Ayurveda">Ayurveda</option>
-                        <option value="Yoga Therapy">Yoga Therapy</option>
-                        <option value="Naturopathy">Naturopathy</option>
-                        <option value="Clinical Psychology">Clinical Psychology</option>
-                        <option value="Nutrition & Dietetics">Nutrition & Dietetics</option>
-                        <option value="Acupuncture">Acupuncture</option>
-                        <option value="Herbalism">Herbalism</option>
+                        <option value="Cardiology">Cardiology</option>
+                        <option value="Neurology">Neurology</option>
+                        <option value="Endocrinology">Endocrinology</option>
+                        <option value="Gastroenterology">Gastroenterology</option>
+                        <option value="Nephrology">Nephrology</option>
+                        <option value="Pulmonology">Pulmonology</option>
+                        <option value="Rheumatology">Rheumatology</option>
+                        <option value="ENT">ENT</option>
+                        <option value="Dentistry">Dentistry</option>
+                        <option value="Psychiatry">Psychiatry</option>
+                        <option value="Gynecology">Gynecology</option>
+                        <option value="Obstetrics">Obstetrics</option>
+                        <option value="Neonatology">Neonatology</option>
+                        <option value="Dermatology">Dermatology</option>
+                        <option value="General Doctor">General Doctor</option>
                       </select>
                       {errors.specialization && <p className="text-red-500 text-xs mt-1">{errors.specialization}</p>}
                     </div>

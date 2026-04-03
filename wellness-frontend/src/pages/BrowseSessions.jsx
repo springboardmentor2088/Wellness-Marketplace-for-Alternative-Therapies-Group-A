@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { getAccessToken } from '../services/authService';
 import { getVerifiedPractitioners } from '../services/userService';
 import SessionCalendar from '../components/SessionCalendar';
-import BookingForm from '../components/BookingForm';
-import { getPractitionerReviews } from '../services/reviewService';
 import toast from 'react-hot-toast';
+import UserHeader from '../components/UserHeader';
 
-const SPECIALIZATIONS = ['All', 'Ayurveda', 'Physiotherapy', 'Yoga Therapy', 'Naturopathy', 'Meditation', 'Nutrition'];
+const SPECIALIZATIONS = ['All', 'Cardiology', 'Neurology', 'Endocrinology', 'Gastroenterology', 'Nephrology', 'Pulmonology', 'Rheumatology', 'ENT', 'Dentistry', 'Psychiatry', 'Gynecology', 'Obstetrics', 'Neonatology', 'Dermatology', 'General Doctor'];
 
 export default function BrowseSessions() {
   const navigate = useNavigate();
@@ -78,9 +77,12 @@ export default function BrowseSessions() {
               <p className="text-xs text-slate-500">Find and book therapy sessions with verified practitioners</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-600">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span>{practitioners.length} practitioners available</span>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span>{practitioners.length} practitioners available</span>
+            </div>
+            <UserHeader className="" />
           </div>
         </div>
       </div>

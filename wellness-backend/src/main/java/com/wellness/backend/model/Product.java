@@ -1,5 +1,6 @@
 package com.wellness.backend.model;
 
+import com.wellness.backend.enums.ProductModerationStatus;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -33,6 +34,20 @@ public class Product {
 
     @Column(length = 500)
     private String imageUrl;
+
+    @Column(length = 255)
+    private String activeIngredient;
+
+    @Column(length = 500)
+    private String imageUrl2;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "moderation_status", nullable = false, length = 30)
+    private ProductModerationStatus moderationStatus = ProductModerationStatus.PENDING_REVIEW;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seller_id")
+    private ProductSellerProfile seller;
 
     // ================= CONSTRUCTORS =================
     public Product() {
@@ -95,11 +110,20 @@ public class Product {
         this.stock = stock;
     }
 
-    public String getImageUrl() {
-        return imageUrl;
-    }
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
 
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
-    }
+    public String getImageUrl2() { return imageUrl2; }
+    public void setImageUrl2(String imageUrl2) { this.imageUrl2 = imageUrl2; }
+
+    public String getActiveIngredient() { return activeIngredient; }
+    public void setActiveIngredient(String activeIngredient) { this.activeIngredient = activeIngredient; }
+
+    public ProductModerationStatus getModerationStatus() { return moderationStatus; }
+    public void setModerationStatus(ProductModerationStatus moderationStatus) { this.moderationStatus = moderationStatus; }
+
+    public ProductSellerProfile getSeller() { return seller; }
+    public void setSeller(ProductSellerProfile seller) { this.seller = seller; }
 }
+
+

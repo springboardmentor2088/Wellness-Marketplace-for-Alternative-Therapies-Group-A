@@ -1,5 +1,6 @@
 package com.wellness.backend.repository;
 
+import com.wellness.backend.enums.ProductModerationStatus;
 import com.wellness.backend.model.Product;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -25,4 +26,11 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
 
     // Find available products (stock > 0)
     List<Product> findByStockGreaterThan(Integer stock);
+
+    // Search by synonyms for Medical Intelligence matching
+    @Query("SELECT p FROM Product p WHERE p.activeIngredient IN :synonyms OR LOWER(p.name) LIKE LOWER(CONCAT('%', :primaryQuery, '%'))")
+    List<Product> findBySynonyms(@Param("synonyms") List<String> synonyms, @Param("primaryQuery") String primaryQuery);
+
+    List<Product> findBySeller_Id(Integer sellerId);
+    List<Product> findByModerationStatus(ProductModerationStatus status);
 }

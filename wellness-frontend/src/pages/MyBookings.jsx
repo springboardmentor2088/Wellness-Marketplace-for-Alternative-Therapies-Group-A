@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { getAccessToken } from '../services/authService';
 import { getCurrentUser } from '../services/userService';
 import { getSessionsForUser } from '../services/sessionService';
-import SessionCard from '../components/SessionCard';
-import ReviewForm from '../components/ReviewForm';
 import toast from 'react-hot-toast';
+import UserHeader from '../components/UserHeader';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -103,15 +102,18 @@ export default function MyBookings() {
             </button>
             <div>
               <h1 className="text-xl font-bold text-slate-900">My Bookings</h1>
-              <p className="text-xs text-slate-500">View and manage all your sessions</p>
+              <p className="text-xs text-slate-500">Manage your therapy sessions and health journey</p>
             </div>
           </div>
-          <button
-            onClick={() => navigate('/browse-sessions')}
-            className="px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl text-sm font-semibold hover:shadow-lg transition-all"
-          >
-            + Book New Session
-          </button>
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => navigate('/browse-sessions')}
+              className="px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-xl text-sm font-semibold hover:shadow-lg transition-all"
+            >
+              + Book New Session
+            </button>
+            <UserHeader className="" />
+          </div>
         </div>
       </div>
 

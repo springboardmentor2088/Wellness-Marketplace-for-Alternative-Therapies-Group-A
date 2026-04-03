@@ -5,6 +5,7 @@ import com.wellness.backend.dto.PractitionerCreateDTO;
 import com.wellness.backend.dto.PractitionerUpdateDTO;
 import com.wellness.backend.dto.OnboardingStatusDTO;
 import com.wellness.backend.dto.PractitionerDocumentDTO;
+import com.wellness.backend.dto.SessionHistoryDTO;
 import com.wellness.backend.model.PractitionerDocument;
 import com.wellness.backend.service.PractitionerService;
 import jakarta.validation.Valid;
@@ -20,6 +21,7 @@ import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import org.springframework.cache.annotation.Cacheable;
 
 @RestController
 @RequestMapping("/api/practitioners")
@@ -44,13 +46,14 @@ public class PractitionerController {
     }
 
     // ================= GET VERIFIED (PUBLIC) =================
+    @Cacheable(value = "verifiedPractitioners")
     @GetMapping("/verified")
     public ResponseEntity<List<PractitionerProfileDTO>> getVerifiedPractitioners() {
         return ResponseEntity.ok(practitionerService.getAllVerifiedPractitioners());
     }
 
-    // ================= CREATE PROFILE (PRACTITIONER ONLY) =================
-    @PreAuthorize("hasRole('PRACTITIONER')")
+    // ================= CREATE PROFILE (PRACTITIONER / PATIENT) =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER')")
     @PostMapping
     public ResponseEntity<PractitionerProfileDTO> createPractitionerProfile(
             @Valid @RequestBody PractitionerCreateDTO createDTO) {
@@ -75,15 +78,15 @@ public class PractitionerController {
         return ResponseEntity.ok(practitionerService.getPractitionerByUserId(userId));
     }
 
-    // ================= CHECK ONBOARDING STATUS (PRACTITIONER) =================
-    @PreAuthorize("hasRole('PRACTITIONER')")
+    // ================= CHECK ONBOARDING STATUS (PRACTITIONER / PATIENT) =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER')")
     @GetMapping("/me/onboarding-status")
     public ResponseEntity<OnboardingStatusDTO> getOnboardingStatus() {
         return ResponseEntity.ok(practitionerService.getOnboardingStatus());
     }
 
-    // ================= UPDATE PROFILE (PRACTITIONER ONLY) =================
-    @PreAuthorize("hasRole('PRACTITIONER')")
+    // ================= UPDATE PROFILE (PRACTITIONER / PATIENT) =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER')")
     @PutMapping("/{id}")
     public ResponseEntity<PractitionerProfileDTO> updatePractitionerProfile(
             @PathVariable Integer id,
@@ -124,8 +127,8 @@ public class PractitionerController {
                 practitionerService.searchBySpecialization(specialization));
     }
 
-    // ================= UPLOAD DOCUMENTS (PRACTITIONER ONLY) =================
-    @PreAuthorize("hasRole('PRACTITIONER')")
+    // ================= UPLOAD DOCUMENTS =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER')")
     @PostMapping("/{practitionerId}/documents/upload")
     public ResponseEntity<List<PractitionerDocumentDTO>> uploadDocuments(
             @PathVariable Integer practitionerId,
@@ -202,5 +205,19 @@ public class PractitionerController {
         } catch (MalformedURLException e) {
             return ResponseEntity.internalServerError().build();
         }
+    }
+
+    // ================= GET ISSUED PRESCRIPTIONS (HISTORY) =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
+    @GetMapping("/me/issued-prescriptions")
+    public ResponseEntity<List<SessionHistoryDTO>> getIssuedPrescriptions() {
+        return ResponseEntity.ok(practitionerService.getSentPrescriptions());
+    }
+
+    // ================= GET PATIENT SHARED LOGS (HISTORY) =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
+    @GetMapping("/me/patient-logs")
+    public ResponseEntity<List<SessionHistoryDTO>> getPatientLogs() {
+        return ResponseEntity.ok(practitionerService.getPatientSharedLogs());
     }
 }

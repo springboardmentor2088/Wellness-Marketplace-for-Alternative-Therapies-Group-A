@@ -54,6 +54,20 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void createSampleProductsIfNotExists() {
+        // Fix existing pending products
+        java.util.List<Product> existingProducts = productRepository.findAll();
+        boolean updatedAny = false;
+        for (Product p : existingProducts) {
+            if (p.getModerationStatus() != com.wellness.backend.enums.ProductModerationStatus.ACTIVE) {
+                p.setModerationStatus(com.wellness.backend.enums.ProductModerationStatus.ACTIVE);
+                productRepository.save(p);
+                updatedAny = true;
+            }
+        }
+        if (updatedAny) {
+            System.out.println("✓ Updated existing products to ACTIVE status");
+        }
+
         // Check if products already exist
         long productCount = productRepository.count();
         if (productCount > 0) {

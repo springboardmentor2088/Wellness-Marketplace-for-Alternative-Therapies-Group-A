@@ -14,6 +14,7 @@ import PaymentModal from "../components/PaymentModal";
 import AddressModal from "../components/AddressModal";
 import { getStoredUser } from "../services/authService";
 import { updateUser } from "../services/userService";
+import UserHeader from "../components/UserHeader";
 
 const FREE_DELIVERY_THRESHOLD = 299;
 const DELIVERY_FEE = 50;
@@ -205,6 +206,7 @@ export default function ShoppingCart() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
+        <UserHeader />
         {/* Header */}
         <div className="mb-8">
           <button

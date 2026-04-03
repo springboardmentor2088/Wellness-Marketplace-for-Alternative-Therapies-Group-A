@@ -17,6 +17,10 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_delivery_date DATETIME;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(100);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_partner VARCHAR(100);
+-- New columns for Product Moderation and AI
+ALTER TABLE product ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE';
+ALTER TABLE product ADD COLUMN IF NOT EXISTS image_url2 VARCHAR(500);
+ALTER TABLE product ADD COLUMN IF NOT EXISTS active_ingredient VARCHAR(255);
 
 
 

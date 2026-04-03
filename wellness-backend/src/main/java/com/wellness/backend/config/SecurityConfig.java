@@ -68,6 +68,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/availability/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/product-reviews/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/forum/threads/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/forum/answers/**").permitAll()
 
@@ -86,10 +87,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/practitioners").authenticated()
 
                         // 5. PRACTITIONER SPECIFIC (Onboarding status, uploads, etc.)
-                        .requestMatchers("/api/practitioners/me/**").hasRole("PRACTITIONER")
-                        .requestMatchers("/api/practitioners/*/documents/**").hasAnyRole("PRACTITIONER", "ADMIN")
+                        .requestMatchers("/api/practitioners/me/**").authenticated()
+                        .requestMatchers("/api/practitioners/*/documents/**").hasAnyRole("PATIENT", "PRACTITIONER", "ADMIN")
                         .requestMatchers("/api/practitioners/user/**").hasAnyRole("PRACTITIONER", "ADMIN")
                         .requestMatchers("/api/practitioners/requests/**").authenticated()
+                        // ai recommendations
+                        .requestMatchers("/recommend").permitAll()
 
                         // 6. ROLE-BASED DASHBOARDS
                         .requestMatchers("/api/practitioner/**").hasRole("PRACTITIONER")

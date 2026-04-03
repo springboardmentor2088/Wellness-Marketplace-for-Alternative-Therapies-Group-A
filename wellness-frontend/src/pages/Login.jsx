@@ -77,7 +77,7 @@ export default function Login() {
         }
       } else if (data.user.role === "ADMIN") {
         // Admin users are protected by RoleBasedRoute
-        navigate("/admin/dashboard");
+        navigate("/admin");
       } else {
         navigate("/user/dashboard");
       }
@@ -92,50 +92,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex">
-
-      {/* LEFT SIDE - HERO SECTION */}
-      <div className="hidden md:flex w-1/2 bg-gradient-to-br from-teal-700 to-teal-900 text-white p-16 flex-col justify-center relative overflow-hidden">
-
-        {/* Glow effect */}
-        <div className="absolute w-72 h-72 bg-teal-400 opacity-20 rounded-full blur-3xl top-10 left-10"></div>
-        <div className="absolute w-96 h-96 bg-teal-300 opacity-10 rounded-full blur-3xl bottom-0 right-0"></div>
-
-        <div className="relative z-10 max-w-lg">
-          <h1 className="text-4xl font-bold leading-tight mb-6">
-            Your Wellness Journey Begins Here.
-          </h1>
-
-          <p className="text-lg text-teal-100 mb-8">
-            A secure and intelligent platform designed for practitioners and patients
-            to collaborate seamlessly in real time.
-          </p>
-
-          <div className="space-y-4 text-teal-100">
-            <div className="flex items-center gap-3">
-              <span className="text-green-300">●</span>
-              Encrypted JWT Authentication
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-green-300">●</span>
-              Role-Based Access Control
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-green-300">●</span>
-              Smart Dashboard & Analytics
-            </div>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-6">
+            <h1 className="text-2xl font-bold text-[#1f6f66]">WellnessHub</h1>
           </div>
         </div>
       </div>
 
-      {/* RIGHT SIDE - LOGIN CARD */}
-      <div className="flex w-full md:w-1/2 bg-[#dcd6c8] items-center justify-center p-8">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white rounded-xl shadow p-10">
 
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10">
-
-          <h2 className="text-3xl font-bold text-teal-800 text-center mb-2">
+          <h2 className="text-3xl font-bold text-[#1f6f66] text-center mb-2">
             Welcome Back
           </h2>
 
@@ -161,7 +132,7 @@ export default function Login() {
                 placeholder="example@email.com or +91 9876543210"
                 value={credentials.identifier}
                 onChange={(e) => setCredentials({ ...credentials, identifier: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1f6f66] transition"
                 required
               />
             </div>
@@ -177,7 +148,7 @@ export default function Login() {
                 placeholder="Enter your password"
                 value={credentials.password}
                 onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1f6f66] transition"
                 required
               />
             </div>
@@ -189,7 +160,7 @@ export default function Login() {
               </label>
               <Link
                 to="/forgot-password"
-                className="text-teal-700 hover:underline"
+                className="text-[#1f6f66] hover:underline"
               >
                 Forgot password?
               </Link>
@@ -198,7 +169,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition"
+              className="w-full bg-[#1f6f66] hover:bg-[#155e57] disabled:bg-gray-400 text-white py-3 rounded-lg font-bold shadow transition"
             >
               {loading ? "Logging in..." : "login"}
             </button>
@@ -208,7 +179,7 @@ export default function Login() {
             Don't have an account?{" "}
             <Link
               to="/register"
-              className="text-teal-800 font-semibold hover:underline"
+              className="text-[#1f6f66] font-semibold hover:underline"
             >
               Create Account
             </Link>

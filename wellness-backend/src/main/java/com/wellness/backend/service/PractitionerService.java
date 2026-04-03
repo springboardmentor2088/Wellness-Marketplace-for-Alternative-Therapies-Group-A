@@ -11,6 +11,11 @@ import com.wellness.backend.model.PractitionerDocument;
 import com.wellness.backend.model.User;
 import com.wellness.backend.repository.PractitionerProfileRepository;
 import com.wellness.backend.repository.PractitionerDocumentRepository;
+import com.wellness.backend.repository.UserRepository;
+import com.wellness.backend.repository.TherapySessionRepository;
+import com.wellness.backend.dto.SessionHistoryDTO;
+import com.wellness.backend.model.TherapySession;
+import com.wellness.backend.enums.SessionStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,16 +41,22 @@ public class PractitionerService {
     private final PractitionerDocumentRepository documentRepository;
     private final UserService userService;
     private final EmailService emailService;
+    private final UserRepository userRepository;
+    private final TherapySessionRepository sessionRepository;
 
     @Autowired
     public PractitionerService(PractitionerProfileRepository practitionerRepository,
             PractitionerDocumentRepository documentRepository,
             UserService userService,
-            EmailService emailService) {
+            EmailService emailService,
+            UserRepository userRepository,
+            TherapySessionRepository sessionRepository) {
         this.practitionerRepository = practitionerRepository;
         this.documentRepository = documentRepository;
         this.userService = userService;
         this.emailService = emailService;
+        this.userRepository = userRepository;
+        this.sessionRepository = sessionRepository;
     }
 
     // ================= GET ALL PRACTITIONERS =================
@@ -89,11 +100,6 @@ public class PractitionerService {
     @Transactional
     public PractitionerProfileDTO createPractitionerProfile(PractitionerCreateDTO createDTO) {
         User currentUser = userService.getCurrentAuthenticatedUser();
-
-        // Check if user is a practitioner
-        if (currentUser.getRole() != User.Role.PRACTITIONER) {
-            throw new AccessDeniedException("Only practitioners can create a practitioner profile");
-        }
 
         // If profile already exists, update it with the submitted data instead of
         // ignoring it
@@ -186,8 +192,16 @@ public class PractitionerService {
 
         PractitionerProfile savedProfile = practitionerRepository.save(profile);
 
-        // Send approval email when practitioner is verified
+        // Send approval email AND upgrade role when practitioner is verified
         if (Boolean.TRUE.equals(verified)) {
+            // Upgrade user role to PRACTITIONER
+            User practitionerUser = profile.getUser();
+            if (practitionerUser.getRole() != User.Role.PRACTITIONER) {
+                practitionerUser.setRole(User.Role.PRACTITIONER);
+                userRepository.save(practitionerUser);
+                logger.info("Admin verified practitioner {} and upgraded user {} to PRACTITIONER role", id, practitionerUser.getId());
+            }
+
             try {
                 emailService.sendPractitionerVerifiedEmail(
                         profile.getUser().getName(),
@@ -389,7 +403,7 @@ public class PractitionerService {
                 document.getUploadedAt());
     }
 
-    private PractitionerProfileDTO mapToDTO(PractitionerProfile profile) {
+    public PractitionerProfileDTO mapToDTO(PractitionerProfile profile) {
 
         PractitionerProfileDTO dto = new PractitionerProfileDTO();
 
@@ -409,5 +423,45 @@ public class PractitionerService {
         dto.setCreatedAt(profile.getCreatedAt());
 
         return dto;
+    }
+
+    // ================= GET SENT PRESCRIPTIONS HISTORY =================
+    @Transactional(readOnly = true)
+    public List<SessionHistoryDTO> getSentPrescriptions() {
+        User currentUser = userService.getCurrentAuthenticatedUser();
+        PractitionerProfile profile = practitionerRepository.findByUser_Id(currentUser.getId())
+                .orElseThrow(() -> new RuntimeException("Practitioner profile not found"));
+
+        return sessionRepository.findByPractitioner_IdAndPrescribedDocumentUrlIsNotNullOrderBySessionDateDescStartTimeDesc(profile.getId())
+                .stream()
+                .map(s -> new SessionHistoryDTO(
+                        s.getId(),
+                        s.getUser().getName(),
+                        s.getSessionDate(),
+                        s.getStartTime(),
+                        s.getPrescribedDocumentUrl(),
+                        "PRESCRIPTION"
+                ))
+                .collect(Collectors.toList());
+    }
+
+    // ================= GET PATIENT SHARED LOGS HISTORY =================
+    @Transactional(readOnly = true)
+    public List<SessionHistoryDTO> getPatientSharedLogs() {
+        User currentUser = userService.getCurrentAuthenticatedUser();
+        PractitionerProfile profile = practitionerRepository.findByUser_Id(currentUser.getId())
+                .orElseThrow(() -> new RuntimeException("Practitioner profile not found"));
+
+        return sessionRepository.findByPractitioner_IdAndPatientDocumentUrlIsNotNullOrderBySessionDateDescStartTimeDesc(profile.getId())
+                .stream()
+                .map(s -> new SessionHistoryDTO(
+                        s.getId(),
+                        s.getUser().getName(),
+                        s.getSessionDate(),
+                        s.getStartTime(),
+                        s.getPatientDocumentUrl(),
+                        "PATIENT_LOG"
+                ))
+                .collect(Collectors.toList());
     }
 }

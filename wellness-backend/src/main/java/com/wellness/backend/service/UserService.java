@@ -68,7 +68,13 @@ public class UserService {
             targetUser.setBio(updateDTO.getBio());
         }
 
-        if (updateDTO.getPhone() != null) {
+        if (updateDTO.getPhone() != null && !updateDTO.getPhone().isBlank()) {
+            if (!updateDTO.getPhone().matches("^\\d{10}$")) {
+                throw new RuntimeException("Phone number must be exactly 10 digits");
+            }
+            if (!updateDTO.getPhone().equals(targetUser.getPhone()) && userRepository.existsByPhone(updateDTO.getPhone())) {
+                throw new RuntimeException("Phone number is already registered");
+            }
             targetUser.setPhone(updateDTO.getPhone());
         }
 

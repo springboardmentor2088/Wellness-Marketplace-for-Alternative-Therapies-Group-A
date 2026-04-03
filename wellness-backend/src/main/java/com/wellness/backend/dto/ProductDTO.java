@@ -27,6 +27,10 @@ public class ProductDTO {
     private Boolean available; // Calculated if stock > 0
 
     private String imageUrl;
+    private String imageUrl2;
+    private String activeIngredient;
+    private Integer sellerId;
+    private String moderationStatus;
 
     // Constructors
     public ProductDTO() {}
@@ -105,4 +109,21 @@ public class ProductDTO {
     public void setImageUrl(String imageUrl) {
         this.imageUrl = imageUrl;
     }
+
+    public String getActiveIngredient() {
+        return activeIngredient;
+    }
+
+    public void setActiveIngredient(String activeIngredient) {
+        this.activeIngredient = activeIngredient;
+    }
+
+    public String getImageUrl2() { return imageUrl2; }
+    public void setImageUrl2(String imageUrl2) { this.imageUrl2 = imageUrl2; }
+
+    public Integer getSellerId() { return sellerId; }
+    public void setSellerId(Integer sellerId) { this.sellerId = sellerId; }
+
+    public String getModerationStatus() { return moderationStatus; }
+    public void setModerationStatus(String moderationStatus) { this.moderationStatus = moderationStatus; }
 }
