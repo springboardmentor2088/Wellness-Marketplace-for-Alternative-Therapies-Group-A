@@ -7,6 +7,7 @@ import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.repository.PractitionerAvailabilityRepository;
 import com.wellness.backend.repository.PractitionerProfileRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,7 @@ public class AvailabilityService {
     private PractitionerProfileRepository practitionerRepository;
 
     // ================= SET / UPDATE AVAILABILITY =================
+    @CacheEvict(value = "availableSlots", allEntries = true)
     @Transactional
     public AvailabilityDTO setAvailability(Integer practitionerId, SetAvailabilityDTO dto) {
         PractitionerProfile practitioner = practitionerRepository.findById(practitionerId)

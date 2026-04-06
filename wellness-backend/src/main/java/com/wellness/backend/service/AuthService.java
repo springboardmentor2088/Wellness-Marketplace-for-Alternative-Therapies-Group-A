@@ -72,13 +72,20 @@ public class AuthService {
     public MessageResponseDTO registerUser(UserRegisterDTO registerDTO) {
 
         if (userRepository.existsByEmail(registerDTO.getEmail())) {
-            throw new RuntimeException("Email is already registered");
+            throw new IllegalArgumentException("Email is already registered");
         }
 
-        if (registerDTO.getPhone() != null && !registerDTO.getPhone().isBlank()
-                && userRepository.existsByPhone(registerDTO.getPhone())) {
-            throw new RuntimeException("Phone number is already registered");
+        if (registerDTO.getPhone() != null && !registerDTO.getPhone().isBlank()) {
+            if (!registerDTO.getPhone().matches("^\\d{10}$")) {
+                throw new IllegalArgumentException("Phone number must be exactly 10 digits");
+            }
+            if (userRepository.existsByPhone(registerDTO.getPhone())) {
+                throw new IllegalArgumentException("Phone number is already registered");
+            }
         }
+
+        // Validate password strength before saving
+        validatePasswordStrength(registerDTO.getPassword());
 
         // Map DTO → Entity
         User user = new User();
@@ -86,7 +93,7 @@ public class AuthService {
         user.setEmail(registerDTO.getEmail());
         user.setPhone(registerDTO.getPhone());
         user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
-        user.setRole(registerDTO.getRole());
+        user.setRole(User.Role.PATIENT); // Securely force PATIENT role for all public registrations
         user.setBio(registerDTO.getBio());
         user.setEmailVerified(false);
 
@@ -126,14 +133,14 @@ public class AuthService {
         String email = dto.getEmail().trim().toLowerCase();
 
         EmailVerificationOtp otpRecord = emailVerificationOtpRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("No pending verification found for this email."));
+                .orElseThrow(() -> new IllegalArgumentException("No pending verification found for this email."));
 
         if (otpRecord.isExpired()) {
-            throw new RuntimeException("OTP has expired. Please request a new one.");
+            throw new IllegalArgumentException("OTP has expired. Please request a new one.");
         }
 
         if (otpRecord.isMaxAttemptsReached()) {
-            throw new RuntimeException("Maximum verification attempts reached. Please request a new OTP.");
+            throw new IllegalArgumentException("Maximum verification attempts reached. Please request a new OTP.");
         }
 
         // Check OTP — if wrong, increment attempts
@@ -141,12 +148,12 @@ public class AuthService {
             otpRecord.setAttempts(otpRecord.getAttempts() + 1);
             emailVerificationOtpRepository.save(otpRecord);
             int remaining = otpRecord.getMaxAttempts() - otpRecord.getAttempts();
-            throw new RuntimeException("Invalid OTP. " + remaining + " attempt(s) remaining.");
+            throw new IllegalArgumentException("Invalid OTP. " + remaining + " attempt(s) remaining.");
         }
 
         // OTP correct — mark user as verified
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found."));
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
         user.setEmailVerified(true);
         userRepository.save(user);
 
@@ -179,7 +186,7 @@ public class AuthService {
             EmailVerificationOtp record = existing.get();
             if (record.getResendAvailableAt() != null
                     && LocalDateTime.now().isBefore(record.getResendAvailableAt())) {
-                throw new RuntimeException("Please wait before requesting another OTP.");
+                throw new IllegalArgumentException("Please wait before requesting another OTP.");
             }
             emailVerificationOtpRepository.deleteByEmail(normalizedEmail);
         }
@@ -222,36 +229,30 @@ public class AuthService {
         User user;
         if (identifier.contains("@")) {
             user = userRepository.findByEmail(identifier)
-                    .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid email or password"));
         } else {
             user = userRepository.findByPhone(identifier)
-                    .orElseThrow(() -> new RuntimeException("Invalid phone number or password"));
+                    .orElseThrow(() -> new IllegalArgumentException("Invalid phone number or password"));
         }
 
         // Verify password
         if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
-            throw new RuntimeException(
+            throw new IllegalArgumentException(
                     identifier.contains("@") ? "Invalid email or password" : "Invalid phone number or password");
         }
 
         // Block unverified emails (ADMIN is exempt)
         if (user.getRole() != User.Role.ADMIN && !user.isEmailVerified()) {
-            throw new RuntimeException("Please verify your email before logging in.");
+            throw new IllegalArgumentException("Please verify your email before logging in.");
         }
 
-        // Check Verification for Practitioners
-        if (user.getRole() == User.Role.PRACTITIONER) {
-            Optional<PractitionerProfile> profileOpt = practitionerProfileRepository.findByUser_Id(user.getId());
-
-            if (profileOpt.isPresent()) {
-                PractitionerProfile profile = profileOpt.get();
-                if (!Boolean.TRUE.equals(profile.getVerified())) {
-                    throw new RuntimeException("Your account is pending admin verification");
-                }
-            }
-            // If no profile exists yet, allow login so practitioner can complete onboarding
+        // Check if user is blocked
+        if (user.isBlocked()) {
+            throw new IllegalArgumentException("Your account has been blocked: " + (user.getBlockingReason() != null ? user.getBlockingReason() : "Violation of community guidelines"));
         }
 
+        // Check Verification for Practitioners - REMOVED blocking logic to allow login as normal user
+        
         // Generate JWT tokens using email and role
         String accessToken = jwtService.generateToken(user.getEmail(), user.getRole().toString());
         String refreshToken = jwtService.generateRefreshToken(user.getEmail());
@@ -276,11 +277,16 @@ public class AuthService {
 
         // Validate refresh token with email
         if (!jwtService.validateToken(refreshToken, email)) {
-            throw new RuntimeException("Invalid or expired refresh token");
+            throw new IllegalArgumentException("Invalid or expired refresh token");
         }
 
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found for token"));
+                .orElseThrow(() -> new IllegalArgumentException("User not found for token"));
+
+        // Check if user is blocked
+        if (user.isBlocked()) {
+            throw new IllegalArgumentException("Account blocked. Please contact support.");
+        }
 
         // Generate new access token
         String newAccessToken = jwtService.generateToken(user.getEmail(), user.getRole().toString());
@@ -357,16 +363,16 @@ public class AuthService {
     public void resetPassword(String token, String newPassword) {
         // Validate token exists
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid or expired reset link"));
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset link"));
 
         // Validate token is not expired
         if (resetToken.isExpired()) {
-            throw new RuntimeException("Reset link has expired. Please request a new one.");
+            throw new IllegalArgumentException("Reset link has expired. Please request a new one.");
         }
 
         // Validate token has not been used
         if (resetToken.isUsed()) {
-            throw new RuntimeException("Reset link has already been used");
+            throw new IllegalArgumentException("Reset link has already been used");
         }
 
         // Validate password strength (minimum requirements)
@@ -398,23 +404,23 @@ public class AuthService {
      */
     private void validatePasswordStrength(String password) {
         if (password == null || password.length() < 8) {
-            throw new RuntimeException("Password must be at least 8 characters long");
+            throw new IllegalArgumentException("Password must be at least 8 characters long");
         }
 
         if (!password.matches(".*[A-Z].*")) {
-            throw new RuntimeException("Password must contain at least one uppercase letter");
+            throw new IllegalArgumentException("Password must contain at least one uppercase letter");
         }
 
         if (!password.matches(".*[a-z].*")) {
-            throw new RuntimeException("Password must contain at least one lowercase letter");
+            throw new IllegalArgumentException("Password must contain at least one lowercase letter");
         }
 
         if (!password.matches(".*\\d.*")) {
-            throw new RuntimeException("Password must contain at least one digit");
+            throw new IllegalArgumentException("Password must contain at least one digit");
         }
 
         if (!password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\\\"\\\\|,.<>/?].*")) {
-            throw new RuntimeException("Password must contain at least one special character (!@#$%^&* etc.)");
+            throw new IllegalArgumentException("Password must contain at least one special character (!@#$%^&* etc.)");
         }
     }
 

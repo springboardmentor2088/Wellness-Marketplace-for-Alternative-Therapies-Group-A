@@ -73,8 +73,12 @@ export default function CommunityForum() {
 
   const handleCreateThread = async (e) => {
     e.preventDefault();
-    if (!newThread.title.trim() || !newThread.content.trim()) {
-      toast.error("Title and content are required.");
+    if (newThread.title.trim().length < 5) {
+      toast.error("Title must be at least 5 characters.");
+      return;
+    }
+    if (newThread.content.trim().length < 10) {
+      toast.error("Content must be at least 10 characters.");
       return;
     }
     try {
@@ -85,7 +89,8 @@ export default function CommunityForum() {
       setNewThread({ title: '', content: '', category: 'General' });
       fetchThreads(); // Refresh list
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to create thread.");
+      const errorMessage = err.response?.data?.message || err.response?.data?.error || "Failed to create thread.";
+      toast.error(errorMessage);
     } finally {
       setCreating(false);
     }

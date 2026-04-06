@@ -2,7 +2,7 @@ package com.wellness.backend.service;
 
 import com.wellness.backend.dto.TherapySessionDTO;
 import com.wellness.backend.dto.BookSessionDTO;
-import com.wellness.backend.dto.RescheduleSessionDTO;
+import com.wellness.backend.dto.BookSessionDTO;
 import com.wellness.backend.enums.PaymentStatus;
 import com.wellness.backend.enums.SessionStatus;
 import com.wellness.backend.enums.SessionType;
@@ -11,6 +11,8 @@ import com.wellness.backend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.Cacheable;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.*;
@@ -79,13 +81,13 @@ public class TherapySessionService {
         // Practitioner overlap check
         if (sessionRepository.existsOverlappingSession(
                 practitioner.getId(), dto.getSessionDate(), dto.getStartTime(), endTime)) {
-            throw new RuntimeException("This time slot is already booked. Please choose another slot.");
+            throw new RuntimeException("Practitioner is already booked for this slot please try on diff slot.");
         }
 
         // User overlap check
         if (sessionRepository.existsUserOverlappingSession(
                 user.getId(), dto.getSessionDate(), dto.getStartTime(), endTime)) {
-            throw new RuntimeException("You already have another session at this time.");
+            throw new RuntimeException("You have already booked a session on that time.");
         }
 
         TherapySession session = new TherapySession();
@@ -224,7 +226,29 @@ public class TherapySessionService {
             }
         }
 
+        session.setStatus(SessionStatus.BOOKED);
         session.setStatus(SessionStatus.COMPLETED);
+        
+        // Calculate and Record Earnings (20% Platform Fee)
+        BigDecimal fee = session.getFeeAmount();
+        if (fee == null) {
+            fee = session.getPractitioner().getConsultationFee() != null 
+                ? session.getPractitioner().getConsultationFee() 
+                : BigDecimal.ZERO;
+        }
+        
+        BigDecimal platformCommission = fee.multiply(new BigDecimal("0.20"));
+        BigDecimal netAmount = fee.subtract(platformCommission);
+
+        com.wellness.backend.model.DoctorEarning earning = new com.wellness.backend.model.DoctorEarning();
+        earning.setPractitioner(session.getPractitioner());
+        earning.setSession(session);
+        earning.setAmount(fee);
+        earning.setPlatformFee(platformCommission);
+        earning.setNetAmount(netAmount);
+        earning.setPayoutStatus(com.wellness.backend.model.DoctorEarning.PayoutStatus.PENDING);
+        doctorEarningRepository.save(earning);
+
         TherapySession saved = sessionRepository.save(session);
 
         // Notify
@@ -271,16 +295,27 @@ public class TherapySessionService {
     }
 
     // ================= GET AVAILABLE SLOTS =================
+    @Cacheable(value = "availableSlots", key = "#practitionerId + '-' + #date.toString()")
     @Transactional(readOnly = true)
     public List<String> getAvailableSlots(Integer practitionerId, LocalDate date) {
-        PractitionerAvailability.DayOfWeek dayOfWeek = PractitionerAvailability.DayOfWeek
-                .valueOf(date.getDayOfWeek().name());
+        PractitionerAvailability.DayOfWeek dayOfWeek;
+        try {
+            dayOfWeek = PractitionerAvailability.DayOfWeek.valueOf(date.getDayOfWeek().name());
+        } catch (IllegalArgumentException e) {
+            return Collections.emptyList();
+        }
 
         PractitionerAvailability availability = availabilityRepository
                 .findByPractitioner_IdAndDayOfWeek(practitionerId, dayOfWeek)
                 .orElse(null);
 
-        if (availability == null || !availability.getIsAvailable()) {
+        if (availability == null) {
+            java.util.logging.Logger.getLogger(TherapySessionService.class.getName())
+                .info("No availability record found for Practitioner " + practitionerId + " on " + dayOfWeek);
+            return Collections.emptyList();
+        }
+        
+        if (!availability.getIsAvailable()) {
             return Collections.emptyList();
         }
 
@@ -294,9 +329,20 @@ public class TherapySessionService {
 
         List<String> slots = new ArrayList<>();
         LocalTime current = start;
+        
+        // If the requested date is today, we must only show slots that haven't passed
+        LocalTime now = LocalTime.now();
+        boolean isToday = date.equals(LocalDate.now());
+
         while (current.plusMinutes(slotDuration).compareTo(end) <= 0) {
             LocalTime slotEnd = current.plusMinutes(slotDuration);
             LocalTime slotStart = current;
+
+            // Past slot check (for today only)
+            if (isToday && slotStart.isBefore(now)) {
+                current = slotEnd;
+                continue;
+            }
 
             boolean isBooked = bookedSessions.stream().anyMatch(s ->
                     s.getStartTime().isBefore(slotEnd) && s.getEndTime().isAfter(slotStart));
@@ -358,22 +404,6 @@ public class TherapySessionService {
                 .toList();
     }
 
-    // ================= RESCHEDULE =================
-    @Transactional
-    public TherapySessionDTO rescheduleSession(Integer sessionId, RescheduleSessionDTO dto, String userEmail) {
-        TherapySession session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new RuntimeException("Session not found"));
-
-        if (!session.getUser().getEmail().equals(userEmail)) {
-            throw new RuntimeException("Not authorized");
-        }
-
-        session.setSessionDate(dto.getNewDate());
-        session.setStartTime(dto.getNewStartTime());
-        session.setEndTime(dto.getNewStartTime().plusMinutes(session.getDuration()));
-
-        return mapToDTO(sessionRepository.save(session));
-    }
 
     // ================= MAPPING =================
     public TherapySessionDTO mapToDTO(TherapySession session) {

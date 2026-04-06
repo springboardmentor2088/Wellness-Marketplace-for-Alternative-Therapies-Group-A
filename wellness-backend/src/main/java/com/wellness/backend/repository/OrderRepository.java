@@ -33,4 +33,18 @@ public interface OrderRepository extends JpaRepository<Order, Integer> {
     // Find orders by date range
     @Query("SELECT o FROM Order o WHERE o.orderDate BETWEEN :startDate AND :endDate ORDER BY o.orderDate DESC")
     List<Order> findOrdersByDateRange(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
+
+    // Analytics
+    long countByStatus(Order.OrderStatus status);
+
+    long countByPaymentStatus(PaymentStatus status);
+
+    @Query(value = "SELECT DATE_FORMAT(order_date, '%Y-%m') AS month, COUNT(*) FROM orders GROUP BY month ORDER BY month", nativeQuery = true)
+    List<Object[]> countOrdersGroupedByMonth();
+
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = com.wellness.backend.enums.PaymentStatus.PAID")
+    java.math.BigDecimal sumPaidOrderRevenue();
+
+    @Query(value = "SELECT DATE_FORMAT(order_date, '%Y-%m') AS month, COALESCE(SUM(total_amount), 0) FROM orders WHERE payment_status = 'PAID' GROUP BY month ORDER BY month", nativeQuery = true)
+    List<Object[]> sumRevenueGroupedByMonth();
 }

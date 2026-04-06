@@ -6,9 +6,9 @@ import { getAccessToken } from '../services/authService';
 import { getCurrentUser, updateUser } from '../services/userService';
 import { getSessionsForPractitioner, getAvailability, setAvailability } from '../services/sessionService';
 import SessionCard from '../components/SessionCard';
-import NotificationDropdown from '../components/NotificationDropdown';
-import WalletWidget from '../components/WalletWidget';
 import { getPendingEarnings, withdrawEarnings } from '../services/walletService';
+import { getIssuedPrescriptions, getPatientLogs, getAllMedicines, searchMedicines } from '../services/practitionerService';
+import PractitionerHeader from '../components/PractitionerHeader';
 
 export default function PractitionerDashboard() {
   const navigate = useNavigate();
@@ -21,6 +21,7 @@ export default function PractitionerDashboard() {
     name: '', specialization: '', experience: '', qualifications: '',
     email: '', phone: ''
   });
+  const [phoneError, setPhoneError] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   // Sessions & availability state
   const [practSessions, setPractSessions] = useState([]);
@@ -40,10 +41,17 @@ export default function PractitionerDashboard() {
   );
   const [slotDuration, setSlotDuration] = useState(60);
 
-  // Earnings State
   const [earningsData, setEarningsData] = useState({ totalPending: 0, sessionCount: 0, earnings: [] });
   const [loadingEarnings, setLoadingEarnings] = useState(false);
   const [isWithdrawingEarnings, setIsWithdrawingEarnings] = useState(false);
+
+  // New History & Medicines State
+  const [issuedPrescriptions, setIssuedPrescriptions] = useState([]);
+  const [patientLogs, setPatientLogs] = useState([]);
+  const [medicines, setMedicines] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [medicineSearch, setMedicineSearch] = useState('');
+  const [detailsProduct, setDetailsProduct] = useState(null);
 
   useEffect(() => {
     const initDashboard = async () => {
@@ -152,7 +160,88 @@ export default function PractitionerDashboard() {
   const completedRequests = practSessions.filter(s => s.status === 'COMPLETED');
   const acceptedRequests = practSessions.filter(s => s.status === 'BOOKED');
 
+  useEffect(() => {
+    if (activeSection === 'messages') {
+      const fetchHistory = async () => {
+        setLoadingHistory(true);
+        try {
+          const data = await getIssuedPrescriptions();
+          setIssuedPrescriptions(data);
+        } catch (err) {
+          toast.error("Failed to fetch prescription history");
+        } finally {
+          setLoadingHistory(false);
+        }
+      };
+      fetchHistory();
+    }
+    if (activeSection === 'patient-logs') {
+      const fetchLogs = async () => {
+        setLoadingHistory(true);
+        try {
+          const data = await getPatientLogs();
+          setPatientLogs(data);
+        } catch (err) {
+          toast.error("Failed to fetch patient logs");
+        } finally {
+          setLoadingHistory(false);
+        }
+      };
+      fetchLogs();
+    }
+    if (activeSection === 'medicines') {
+      const fetchMeds = async () => {
+        setLoadingHistory(true);
+        try {
+          const data = await getAllMedicines();
+          setMedicines(data);
+        } catch (err) {
+          toast.error("Failed to fetch medicines");
+        } finally {
+          setLoadingHistory(false);
+        }
+      };
+      fetchMeds();
+    }
+  }, [activeSection]);
+
+  const handleMedicineSearch = async (e) => {
+    const query = e.target.value;
+    setMedicineSearch(query);
+    if (query.length > 2) {
+      try {
+        const data = await searchMedicines(query);
+        setMedicines(data);
+      } catch (err) {
+        console.error("Search failed", err);
+      }
+    } else if (query.length === 0) {
+      try {
+        const data = await getAllMedicines();
+        setMedicines(data);
+      } catch (err) {
+        console.error("Fetch meds failed", err);
+      }
+    }
+  };
+
+  const copyMedicineSuggestion = (med) => {
+    const text = `Medicine Suggestion:
+Name: ${med.name}
+Category: ${med.category}
+Details: ${med.description}
+(Available in Wellness Marketplace)`;
+    
+    navigator.clipboard.writeText(text);
+    toast.success("Suggestion copied to clipboard!");
+  };
+
   const handleSaveSettings = async () => {
+    if (settingsData.phone && settingsData.phone.length !== 10) {
+      setPhoneError('Phone number must be exactly 10 digits');
+      toast.error('Please fix phone number errors before saving');
+      return;
+    }
     setSavingSettings(true);
     try {
       // Update user profile
@@ -302,140 +391,67 @@ export default function PractitionerDashboard() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="fixed left-0 top-0 w-64 h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white">
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center text-lg">
+    <div className="flex min-h-screen bg-slate-50 font-sans relative overflow-x-hidden">
+      {/* Mesh Background Element (Static) */}
+      <div className="fixed top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-teal-500/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="fixed bottom-0 left-0 -ml-32 -mb-32 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#1f6f66]/5 rounded-full blur-[120px] pointer-events-none opacity-50"></div>
+
+      {/* Sidebar - Glassmorphic / Static */}
+      <div className="fixed left-0 top-0 w-64 h-screen bg-slate-900 border-r border-slate-800 z-50 overflow-y-auto hidden md:block">
+        <div className="p-8 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#1f6f66] rounded-xl flex items-center justify-center text-xl shadow-lg shadow-[#1f6f66]/20">
               🏥
             </div>
-            <h1 className="text-xl font-bold">WellnessHub</h1>
+            <div className="flex flex-col">
+              <h1 className="text-xl font-black tracking-tight leading-none uppercase text-white">Wellness</h1>
+              <p className="text-[10px] font-bold text-[#1f6f66] uppercase tracking-[0.2em] mt-1">Practitioner Hub</p>
+            </div>
           </div>
           {/* Verification Badge */}
-          <div
-            className={`mt-4 flex items-center gap-2 rounded-lg p-2 border ${isVerified
-              ? 'bg-green-500/10 border-green-500/30'
-              : 'bg-amber-500/10 border-amber-500/30'
-              }`}
-          >
-            <svg
-              className={`w-5 h-5 ${isVerified ? 'text-green-500' : 'text-amber-500'}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d={
-                  isVerified
-                    ? 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
-                    : 'M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z'
-                }
-              />
-            </svg>
-            <span
-              className={`text-xs font-semibold ${isVerified ? 'text-green-400' : 'text-amber-300'
-                }`}
-            >
-              {isVerified ? 'Verified Practitioner' : 'Verification Pending'}
+          <div className={`mt-6 flex items-center gap-2 rounded-xl p-3 border ${isVerified ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
+            <span className={`text-[10px] font-black uppercase tracking-widest ${isVerified ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {isVerified ? '✓ Verified' : '⌚ Pending Review'}
             </span>
           </div>
         </div>
 
-        <nav className="py-6">
-          <button
-            onClick={() => setActiveSection('dashboard')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'dashboard'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>📊</span>
-            <span>Dashboard</span>
-          </button>
+        <nav className="py-8 px-4 space-y-1">
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+            { id: 'patients', label: 'My Patients', icon: '👥' },
+            { id: 'sessions', label: 'Sessions', icon: '📅' },
+            { id: 'availability', label: 'Availability', icon: '🗓️' },
+            { id: 'earnings', label: 'Wallet & Finances', icon: '💰' },
+            { id: 'messages', label: 'Medical Documents', icon: '📜' },
+            { id: 'patient-logs', label: 'Patient Logs', icon: '📝' },
+            { id: 'medicines', label: 'Medicines', icon: '💊' },
+            { id: 'settings', label: 'Settings', icon: '⚙️' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSection(tab.id)}
+              className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl text-sm font-bold transition-all duration-300 ${activeSection === tab.id
+                ? 'text-white bg-[#1f6f66] shadow-lg shadow-[#1f6f66]/20'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+            >
+              <span className="text-lg">{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
 
-
-          <button
-            onClick={() => setActiveSection('patients')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'patients'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>👥</span>
-            <span>My Patients</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSection('sessions')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'sessions'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>📅</span>
-            <span>Sessions</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSection('availability')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'availability'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>🗓️</span>
-            <span>Availability</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSection('earnings')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'earnings'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>💰</span>
-            <span>Earnings</span>
-          </button>
-
-          <button
-            onClick={() => setActiveSection('messages')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'messages'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>💬</span>
-            <span>Messages</span>
-          </button>
-
-
-
-          {/* ===== NEW: Community Forum ===== */}
+          <div className="pt-6 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-5">Community</div>
           <button
             onClick={() => navigate('/community-forum')}
-            className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-white/5"
+            className="w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl text-sm font-bold text-slate-400 hover:text-white hover:bg-white/5 transition-all outline-none"
           >
-            <span>💬</span>
+            <span className="text-lg">💬</span>
             <span>Community Forum</span>
           </button>
 
-          <button
-            onClick={() => setActiveSection('settings')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'settings'
-              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-              : 'text-slate-300 hover:bg-white/5'
-              }`}
-          >
-            <span>⚙️</span>
-            <span>Settings</span>
-          </button>
-
-          <div className="mt-8 pt-6 border-t border-white/10">
+          <div className="mt-8 pt-8 border-t border-white/5">
             <button
               onClick={() => {
                 localStorage.removeItem('user');
@@ -446,22 +462,19 @@ export default function PractitionerDashboard() {
                 localStorage.removeItem('adminLoggedIn');
                 navigate('/login');
               }}
-              className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-red-500/20 hover:text-red-300 rounded-lg"
+              className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-sm font-black uppercase tracking-widest text-red-400 hover:bg-red-500/10 transition-all border border-red-500/10"
             >
               <span>🚪</span>
-              <span>Logout</span>
+              <span>Sign Out</span>
             </button>
           </div>
         </nav>
       </div>
 
-      {/* Main Content */}
-      <div className="ml-64 flex-1 p-8">
+      {/* Main Content - Full Page Canvas */}
+      <div className="md:ml-64 flex-1 p-6 md:p-10 max-w-[1750px] mx-auto w-full relative z-10 transition-all duration-500">
         {/* Top Header Bar */}
-        <div className="flex justify-end items-center mb-6">
-          <WalletWidget />
-          <NotificationDropdown />
-        </div>
+        <PractitionerHeader />
 
         {/* Pending Verification Banner */}
         {!isVerified && (
@@ -672,7 +685,7 @@ export default function PractitionerDashboard() {
                             </a>
                           ) : (
                             <div className="w-full mt-4 py-3 bg-purple-300 text-purple-100 rounded-lg font-semibold text-center cursor-not-allowed">
-                              Join available 15 min before session
+                              Link active 15m before start
                             </div>
                           );
                         })()}
@@ -885,21 +898,254 @@ export default function PractitionerDashboard() {
           </>
         )}
 
-        {/* Messages Section */}
+        {/* Issued Prescriptions (Messages) Section */}
         {activeSection === 'messages' && (
           <>
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900">Messages</h2>
-              <p className="text-slate-600 text-sm mt-2">Communicate with your patients</p>
+              <h2 className="text-3xl font-bold text-slate-900">Issued Prescriptions</h2>
+              <p className="text-slate-600 text-sm mt-2">History of documents issued to your patients</p>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-              <div className="text-center py-20">
-                <div className="text-6xl mb-4">💬</div>
-                <h3 className="text-xl font-semibold text-slate-900 mb-2">No messages yet</h3>
-                <p className="text-slate-600 text-sm">Your conversations with patients will appear here</p>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden text-sm">
+              {loadingHistory ? (
+                <div className="flex justify-center py-16">
+                  <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : issuedPrescriptions.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="text-5xl mb-4">📜</div>
+                  <h3 className="text-lg font-semibold text-slate-900">No prescriptions issued</h3>
+                  <p className="text-slate-500">Completed sessions with issued documents will appear here</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 font-bold text-slate-700">Date</th>
+                        <th className="px-6 py-4 font-bold text-slate-700">Time</th>
+                        <th className="px-6 py-4 font-bold text-slate-700">Patient Name</th>
+                        <th className="px-6 py-4 font-bold text-slate-700">Document</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {issuedPrescriptions.map((px) => (
+                        <tr key={px.sessionId} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 text-slate-900 font-medium">{new Date(px.date).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 text-slate-600 font-mono">{px.time}</td>
+                          <td className="px-6 py-4 text-slate-900 font-bold">{px.patientName}</td>
+                          <td className="px-6 py-4">
+                            <a 
+                              href={px.documentUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-bold underline decoration-indigo-200"
+                            >
+                              <span>📂</span> View Document
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Patient Logs Section */}
+        {activeSection === 'patient-logs' && (
+          <>
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-slate-900">Patient Logs</h2>
+              <p className="text-slate-600 text-sm mt-2">Review documents and notes shared by your patients</p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden text-sm">
+              {loadingHistory ? (
+                <div className="flex justify-center py-16">
+                  <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : patientLogs.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="text-5xl mb-4">📓</div>
+                  <h3 className="text-lg font-semibold text-slate-900">No logs found</h3>
+                  <p className="text-slate-500">Patient-uploaded documents and notes will appear here</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 font-bold text-slate-700">Date</th>
+                        <th className="px-6 py-4 font-bold text-slate-700">Time</th>
+                        <th className="px-6 py-4 font-bold text-slate-700">Patient Name</th>
+                        <th className="px-6 py-4 font-bold text-slate-700">Note / Document</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {patientLogs.map((log) => (
+                        <tr key={log.sessionId} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 text-slate-900 font-medium">{new Date(log.date).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 text-slate-600 font-mono">{log.time}</td>
+                          <td className="px-6 py-4 text-slate-900 font-bold">{log.patientName}</td>
+                          <td className="px-6 py-4">
+                            {log.documentUrl.startsWith('http') ? (
+                              <a 
+                                href={log.documentUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 font-bold underline"
+                              >
+                                <span>📄</span> View Shared File
+                              </a>
+                            ) : (
+                              <div className="p-2 bg-slate-100 rounded text-slate-700 italic border border-slate-200">
+                                "{log.documentUrl}"
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Medicines Catalog Section */}
+        {activeSection === 'medicines' && (
+          <>
+            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900">Medicines Catalog</h2>
+                <p className="text-slate-600 text-sm mt-2">Browse and suggest products from the Wellness Marketplace</p>
+              </div>
+              <div className="relative w-full md:w-80">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
+                <input 
+                  type="text"
+                  placeholder="Search medicines..."
+                  value={medicineSearch}
+                  onChange={handleMedicineSearch}
+                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 shadow-sm"
+                />
               </div>
             </div>
+
+            {loadingHistory ? (
+              <div className="flex justify-center py-16">
+                <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : medicines.length === 0 ? (
+              <div className="bg-white rounded-xl p-16 text-center border border-slate-200">
+                <p className="text-5xl mb-4">💊</p>
+                <p className="text-slate-500">No medicines match your search</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {medicines.map((med) => (
+                  <div key={med.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col group hover:shadow-lg transition-all">
+                    <div className="h-40 bg-slate-100 relative overflow-hidden">
+                      {med.imageUrl ? (
+                        <img src={med.imageUrl} alt={med.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl opacity-20">📦</div>
+                      )}
+                      <div className="absolute top-2 right-2 px-2 py-1 bg-white/90 backdrop-blur rounded text-[10px] font-black uppercase tracking-widest text-slate-600 shadow-sm">
+                        {med.category}
+                      </div>
+                    </div>
+                    <div className="p-5 flex-1 flex flex-col">
+                      <h4 className="font-bold text-slate-900 text-lg mb-1 line-clamp-1">{med.name}</h4>
+                      <p className="text-slate-500 text-xs line-clamp-2 italic mb-4 h-8">
+                        {med.description || 'No description available'}
+                      </p>
+                      <button 
+                        onClick={() => setDetailsProduct(med)}
+                        className="mt-auto w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <span>🔍</span> View Details
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Medicine Details Modal */}
+            {detailsProduct && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] transition-all p-4">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-300">
+                  <div className="relative h-64 bg-slate-100">
+                    {detailsProduct.imageUrl ? (
+                      <img src={detailsProduct.imageUrl} alt={detailsProduct.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-6xl opacity-20">📦</div>
+                    )}
+                    <button 
+                      onClick={() => setDetailsProduct(null)}
+                      className="absolute top-4 right-4 w-10 h-10 bg-white/80 backdrop-blur rounded-full flex items-center justify-center text-slate-900 hover:bg-white transition-all shadow-lg"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  
+                  <div className="p-8">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 inline-block">
+                          {detailsProduct.category}
+                        </span>
+                        <h3 className="text-2xl font-black text-slate-900">{detailsProduct.name}</h3>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-black text-slate-900">₹{detailsProduct.price}</div>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase">Current MRP</div>
+                      </div>
+                    </div>
+
+                    <p className="text-slate-600 text-sm leading-relaxed mb-8 border-l-4 border-slate-200 pl-4 py-2 bg-slate-50 rounded-r-xl">
+                      {detailsProduct.description || "No detailed description available for this product."}
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Availability</div>
+                        <div className={`text-sm font-bold ${detailsProduct.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {detailsProduct.stock > 0 ? `In Stock (${detailsProduct.stock})` : 'Out of Stock'}
+                        </div>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Marketplace ID</div>
+                        <div className="text-sm font-bold text-slate-900">#{detailsProduct.id}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => {
+                          copyMedicineSuggestion(detailsProduct);
+                          setDetailsProduct(null);
+                        }}
+                        className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-slate-500/20"
+                      >
+                        <span>📋</span> Copy Suggestion
+                      </button>
+                      <button 
+                        onClick={() => setDetailsProduct(null)}
+                        className="px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -984,10 +1230,20 @@ export default function PractitionerDashboard() {
                       <input
                         type="tel"
                         value={settingsData.phone}
-                        onChange={(e) => setSettingsData({ ...settingsData, phone: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
-                        placeholder="+1 234 567 8900"
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          setSettingsData({ ...settingsData, phone: value });
+                          if (value.length > 0 && value.length !== 10) {
+                            setPhoneError('Phone number must be exactly 10 digits');
+                          } else {
+                            setPhoneError('');
+                          }
+                        }}
+                        className={`w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 ${phoneError ? 'border-red-500 focus:ring-red-500' : 'border-slate-300 focus:ring-green-500'}`}
+                        placeholder="Enter 10-digit phone number"
+                        maxLength="10"
                       />
+                      {phoneError && <p className="text-red-600 text-xs mt-1">{phoneError}</p>}
                     </div>
                   </div>
                 </div>

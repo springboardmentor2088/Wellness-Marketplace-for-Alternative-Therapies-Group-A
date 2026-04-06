@@ -81,6 +81,9 @@ public class TherapySession {
     @Column(length = 1000)
     private String prescribedDocumentUrl;
 
+    @Column(length = 1000)
+    private String patientDocumentUrl;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -263,5 +266,13 @@ public class TherapySession {
 
     public void setPrescriptionPath(String prescriptionPath) {
         this.prescribedDocumentUrl = prescriptionPath;
+    }
+
+    public String getPatientDocumentUrl() {
+        return patientDocumentUrl;
+    }
+
+    public void setPatientDocumentUrl(String patientDocumentUrl) {
+        this.patientDocumentUrl = patientDocumentUrl;
     }
 }

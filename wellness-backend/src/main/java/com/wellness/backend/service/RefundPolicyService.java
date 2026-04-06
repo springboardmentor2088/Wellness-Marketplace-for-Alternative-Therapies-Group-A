@@ -23,23 +23,10 @@ public class RefundPolicyService {
     public BigDecimal calculateRefundAmount(TherapySession session, TherapySession.CancelledBy cancelledBy,
             BigDecimal paidAmount) {
         if (cancelledBy == TherapySession.CancelledBy.PRACTITIONER || cancelledBy == TherapySession.CancelledBy.ADMIN) {
-            return paidAmount; // Full refund
+            return paidAmount; // Full refund if practitioner or admin cancels
         }
 
-        // Cancelled by User
-        LocalDateTime sessionStartDateTime = session.getSessionDate().atTime(session.getStartTime());
-        LocalDateTime now = LocalDateTime.now();
-
-        if (now.isAfter(sessionStartDateTime)) {
-            return BigDecimal.ZERO; // No refund if session has already started/passed
-        }
-
-        long hoursUntilSession = ChronoUnit.HOURS.between(now, sessionStartDateTime);
-
-        if (hoursUntilSession >= 24) {
-            return paidAmount; // 100% refund
-        } else {
-            return paidAmount.multiply(new BigDecimal("0.50")); // 50% refund
-        }
+        // Flat 90% refund for user-initiated cancellations (10% platform fee retained)
+        return paidAmount.multiply(new BigDecimal("0.90")).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 }

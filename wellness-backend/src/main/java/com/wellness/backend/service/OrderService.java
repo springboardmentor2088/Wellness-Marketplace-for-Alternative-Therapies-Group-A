@@ -69,6 +69,9 @@ public class OrderService {
     @Autowired
     private WalletService walletService;
 
+    @Autowired
+    private com.wellness.backend.repository.SellerEarningRepository sellerEarningRepository;
+
     // ================= CREATE ORDER =================
     @Transactional
     public OrderDTO createOrder(CreateOrderDTO dto, String userEmail) {
@@ -270,6 +273,26 @@ public class OrderService {
                 .orElseThrow(() -> new RuntimeException("Order not found"));
         order.setPaymentStatus(PaymentStatus.PAID);
         Order saved = orderRepository.save(order);
+
+        // Record Seller Earnings (20% Platform Fee)
+        if (saved.getOrderItems() != null) {
+            for (com.wellness.backend.model.OrderItem item : saved.getOrderItems()) {
+                if (item.getProduct() != null && item.getProduct().getSeller() != null) {
+                    BigDecimal itemTotal = item.getPrice().multiply(new java.math.BigDecimal(item.getQuantity()));
+                    BigDecimal platformFee = itemTotal.multiply(new java.math.BigDecimal("0.20"));
+                    BigDecimal netAmount = itemTotal.subtract(platformFee);
+
+                    com.wellness.backend.model.SellerEarning earning = new com.wellness.backend.model.SellerEarning();
+                    earning.setSeller(item.getProduct().getSeller());
+                    earning.setOrder(saved);
+                    earning.setAmount(itemTotal);
+                    earning.setPlatformFee(platformFee);
+                    earning.setNetAmount(netAmount);
+                    earning.setPayoutStatus(com.wellness.backend.model.SellerEarning.PayoutStatus.PENDING);
+                    sellerEarningRepository.save(earning);
+                }
+            }
+        }
 
         auditLogService.logAction(
                 order.getUser().getId(),

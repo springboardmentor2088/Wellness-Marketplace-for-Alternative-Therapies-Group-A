@@ -40,3 +40,8 @@ export const createAppointmentRequest = async (practitionerId, requestData) => {
     );
     return response.data;
 };
+// ---- Get Onboarding Status (for verification check) ----
+export const getOnboardingStatus = async () => {
+    const response = await axios.get("/api/practitioners/me/onboarding-status", getAuthHeaders());
+    return response.data;
+};

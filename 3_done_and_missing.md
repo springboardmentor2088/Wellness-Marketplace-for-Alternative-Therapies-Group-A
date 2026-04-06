@@ -20,9 +20,11 @@
  | `ProductReviewController`| `/api/product-reviews` | ✅ Complete |
  | `ReviewController` | `/api/reviews` | ✅ Complete (Session-based feedback) |
  | `WalletController` | `/api/wallet` | ✅ Complete |
+ | `MedicalIntelligenceController`| `/api/medical-intelligence` | ✅ Complete (AI Triage & Analysis) |
  | `DoctorEarningController`| `/api/doctor-earnings` | ✅ Complete |
  | `WebSocketController` | `@MessageMapping` | ✅ Complete |
  | `UserController` | `/api/users` | ✅ Complete |
+ | `AdminModerationController`| `/api/admin/moderation` | ✅ Complete |
  | `GlobalExceptionHandler` | `@ControllerAdvice` | ✅ Complete |
  
  ### Services (17)
@@ -41,6 +43,9 @@
  | `ProductReviewService` | ✅ Complete |
  | `ReviewService` | ✅ Complete (Practitioner reviews) |
  | `WalletService` | ✅ Complete |
+ | `MedicalIntelligenceService`| ✅ Complete (Gemini Integration) |
+ | `GeminiService` | ✅ Complete (Multi-model AI Orchestration) |
+ | `PractitionerRecommendationService`| ✅ Complete |
  | `EmailService` | ✅ Complete |
  | `UserService` | ✅ Complete |
  | `WebSocketService` | ✅ Complete |
@@ -65,6 +70,10 @@
  | `WalletTransaction` | Ledger |
  | `PractitionerDocument` | Credentials |
  | `PractitionerRequest` | Consult requests |
+ | `MedicalAnalysisDTO` | Prescription OCR results |
+ | `TriageDTO` | Symptom triage advice |
+ | `TriageResponse` | API response for triage |
+ | `AdminAnalyticsDTO` | Dashboard metrics |
  
  ### Security Config
  - ✅ JWT stateless authentication
@@ -85,7 +94,7 @@
  | `VerifyEmail.jsx` | `/verify-email` | ✅ Complete |
  | `UserDashboard.jsx` | `/user/dashboard` | ✅ Complete |
  | `PractitionerDashboard.jsx` | `/practitioner/dashboard` | ✅ Complete |
- | `AdminDashboard.jsx` | `/admin/dashboard` | ✅ Complete (Practitioners, Sessions, Products, Orders, Reports) |
+ | `AdminDashboard.jsx` | `/admin/dashboard` | ✅ Complete (Vetting, Merchants, Clinical, Shop, Reports) |
  | `BrowseSessions.jsx` | `/browse-sessions` | ✅ Complete |
  | `MyBookings.jsx` | `/my-bookings` | ✅ Complete |
  | `ProductMarketplace.jsx` | `/products` | ✅ Complete |
@@ -94,6 +103,10 @@
  | `WalletPage.jsx` | `/wallet` | ✅ Complete |
  | `CommunityForum.jsx` | `/community-forum` | ✅ Complete |
  | `ForumThreadDetail.jsx` | `/forum/thread/:id` | ✅ Complete |
+ | `SellerDashboard.jsx` | `/seller/dashboard` | ✅ Complete |
+ | `SellerOnboarding.jsx` | `/seller/onboarding` | ✅ Complete |
+ | `ForgotPassword.jsx` | `/forgot-password` | ✅ Complete |
+ | `ResetPassword.jsx` | `/reset-password` | ✅ Complete |
  | `Unauthorized.jsx` | `/unauthorized` | ✅ Complete |
  
  ### Components (10)
@@ -110,29 +123,18 @@
  
  ## ❌ MISSING / INCOMPLETE PARTS
  
- ### 1. Session Detail Page
- - **Backend**: ❌ `GET /api/sessions/{id}` endpoint missing
- - **Frontend**: ❌ No `SessionDetail.jsx` page
  - **Impact**: Users cannot navigate to a specific session to view full details
+
  
- ### 2. Recommendation System
- - **Schema**: `recommendation` table exists ✅
- - **Backend**: ❌ No `RecommendationController` or `RecommendationService`
- - **Frontend**: ❌ No recommendation UI
- - **Impact**: "Suggest therapy based on symptoms" feature not implemented
+ ### 4. Multi-Role Onboarding
+ - **Done**: Patient, Practitioner, Admin, Product Seller.
+ - **Incomplete**: Delivery Agent onboarding (UI pending).
  
- ### 3. Video/Chat for Online Sessions
- - `meeting_link` column exists in `therapy_session` table ✅ (auto-generated UUID URL on booking)
- - **Backend**: No Jitsi / Zoom / WebRTC integration
- - **Frontend**: No in-app video call
- - **Impact**: Online sessions rely on an external meeting link
+ ### 5. Avatar / Profile Pictures
+ - **Impact**: Still using default UI icons.
  
- ### 4. No Profile Picture / Avatar Upload
- - Users have `bio`, `phone`, `address` but no avatar/photo column or upload API
- 
- ### 5. Limited Pagination
- - Backend returns paginated notifications ✅
- - **Frontend**: Most lists (bookings, practitioners, orders) don't implement pagination/infinite scroll
+ ### 6. Advanced Pagination
+ - **Impact**: Notifications use server-side pagination; other lists pending.
  
  ---
  
@@ -140,7 +142,7 @@
  
  | Priority | Missing Item | Effort |
  |---|---|---|
- | 🔴 High | `GET /api/sessions/{id}` + `SessionDetail.jsx` | Low |
+ | 🔴 High | `SessionDetail.jsx` | Low |
+ | 🟠 Medium | Delivery Agent Dashboard | Medium |
  | 🟢 Low | Video call integration | Very High |
- | 🟢 Low | Recommendation system (suggest therapy) | High |
  | 🟢 Low | Profile Pictures | Medium |

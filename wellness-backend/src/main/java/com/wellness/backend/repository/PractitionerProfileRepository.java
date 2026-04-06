@@ -8,6 +8,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface PractitionerProfileRepository extends JpaRepository<PractitionerProfile, Integer> {
@@ -24,6 +26,11 @@ public interface PractitionerProfileRepository extends JpaRepository<Practitione
 
     // Search practitioners by specialization (case-insensitive)
     List<PractitionerProfile> findBySpecializationContainingIgnoreCase(String specialization);
+
+    // Get top 5 practitioners matching AI Triage specialty (Flexible Match)
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"user"})
+    @Query("SELECT p FROM PractitionerProfile p WHERE p.verified = true AND LOWER(p.specialization) LIKE LOWER(CONCAT('%', :specialty, '%')) ORDER BY p.rating DESC")
+    List<PractitionerProfile> findTop5BySpecialty(@Param("specialty") String specialty, Pageable pageable);
 
     // Get all practitioners sorted by creation date (latest first)
     @Query("SELECT p FROM PractitionerProfile p ORDER BY p.createdAt DESC")

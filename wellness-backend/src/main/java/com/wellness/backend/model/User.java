@@ -11,6 +11,8 @@ public class User {
     public enum Role {
         PATIENT,
         PRACTITIONER,
+        PRODUCT_SELLER,
+        DELIVERY_AGENT,
         ADMIN
     }
 
@@ -48,6 +50,12 @@ public class User {
 
     @Column(name = "email_verified", columnDefinition = "TINYINT(1) DEFAULT 0")
     private boolean emailVerified = false;
+
+    @Column(name = "blocked", columnDefinition = "TINYINT(1) DEFAULT 0")
+    private boolean blocked = false;
+
+    @Column(name = "blocking_reason", columnDefinition = "TEXT")
+    private String blockingReason;
 
     @PrePersist
     public void prePersist() {
@@ -150,4 +158,10 @@ public class User {
     public void setReputationScore(Integer reputationScore) {
         this.reputationScore = reputationScore;
     }
+
+    public boolean isBlocked() { return blocked; }
+    public void setBlocked(boolean blocked) { this.blocked = blocked; }
+
+    public String getBlockingReason() { return blockingReason; }
+    public void setBlockingReason(String blockingReason) { this.blockingReason = blockingReason; }
 }

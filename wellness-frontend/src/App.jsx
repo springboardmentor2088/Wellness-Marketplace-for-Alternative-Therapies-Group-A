@@ -7,8 +7,16 @@ import ResetPassword from "./pages/ResetPassword.jsx";
 import PractitionerOnboarding from "./pages/PractitionerOnboarding.jsx";
 import PractitionerDashboard from "./pages/PractitionerDashboard.jsx";
 import UserDashboard from "./pages/UserDashboard.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
+import AdminLayout from "./layouts/AdminLayout.jsx";
+import AdminClinical from "./pages/AdminClinical.jsx";
+import AdminShop from "./pages/AdminShop.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminSecurity from "./pages/AdminSecurity.jsx";
+import AdminAnalytics from "./pages/AdminAnalytics.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx"; // Keeping for safety
 import ProductMarketplace from "./pages/ProductMarketplace.jsx";
+import SellerOnboarding from "./pages/SellerOnboarding.jsx";
+import SellerDashboard from "./pages/SellerDashboard.jsx";
 import Cart from "./pages/Cart.jsx";
 import OrderHistory from "./pages/OrderHistory.jsx";
 import BrowseSessions from "./pages/BrowseSessions.jsx";
@@ -40,15 +48,25 @@ function App() {
           {/* Error Routes */}
           <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Admin Routes - Role-Based Protection */}
+          {/* Admin Routes - Restructured 2.0 */}
           <Route
-            path="/admin/dashboard"
+            path="/admin"
             element={
               <AdminRoute>
-                <AdminDashboard />
+                <AdminLayout />
               </AdminRoute>
             }
-          />
+          >
+            <Route index element={<Navigate to="/admin/clinical" replace />} />
+            <Route path="clinical" element={<AdminClinical />} />
+            <Route path="shop" element={<AdminShop />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="security" element={<AdminSecurity />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+          </Route>
+
+          {/* Legacy Admin Path Redirect */}
+          <Route path="/admin/dashboard" element={<Navigate to="/admin/clinical" replace />} />
 
           {/* Practitioner Onboarding - PUBLIC/BASIC AUTH ONLY to avoid redirect loops */}
           <Route path="/practitioner/onboarding" element={<PractitionerOnboarding />} />
@@ -63,11 +81,15 @@ function App() {
             }
           />
 
+          {/* Seller Routes */}
+          <Route path="/seller/onboarding" element={<SellerOnboarding />} />
+          <Route path="/seller/dashboard" element={<SellerDashboard />} />
+
           {/* User Routes */}
           <Route path="/user/dashboard" element={<UserDashboard />} />
           <Route path="/browse-sessions" element={<BrowseSessions />} />
           <Route path="/my-bookings" element={<MyBookings />} />
-
+          
           {/* Product Marketplace Routes */}
           <Route path="/products" element={<ProductMarketplace />} />
           <Route path="/cart" element={<Cart />} />

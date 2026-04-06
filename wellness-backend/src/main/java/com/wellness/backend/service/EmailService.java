@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,6 +46,7 @@ public class EmailService {
     /**
      * Sends a welcome email when a new PATIENT registers.
      */
+    @Async("taskExecutor")
     public void sendUserWelcomeEmail(String name, String email) {
         String subject = "Welcome to " + appName + "! 🎉";
         String htmlContent = buildUserWelcomeTemplate(name, email);
@@ -57,6 +59,7 @@ public class EmailService {
      * Sends a confirmation email when a new PRACTITIONER registers.
      * Informs them their account is pending verification.
      */
+    @Async("taskExecutor")
     public void sendPractitionerRegistrationEmail(String name, String email) {
         String subject = appName + " — Registration Received";
         String htmlContent = buildPractitionerRegistrationTemplate(name, email);
@@ -68,6 +71,7 @@ public class EmailService {
     /**
      * Sends an approval email when an ADMIN verifies a practitioner.
      */
+    @Async("taskExecutor")
     public void sendPractitionerVerifiedEmail(String name, String email) {
         String subject = "Congratulations! Your " + appName + " Account is Approved ✅";
         String htmlContent = buildPractitionerVerifiedTemplate(name);
@@ -80,6 +84,7 @@ public class EmailService {
      * Sends a rejection email when an ADMIN rejects a practitioner application.
      * Includes the reason for rejection.
      */
+    @Async("taskExecutor")
     public void sendPractitionerRejectionEmail(String name, String email, String reason) {
         String subject = appName + " — Application Update";
         String htmlContent = buildPractitionerRejectionTemplate(name, reason);
@@ -92,6 +97,7 @@ public class EmailService {
      * Sends a password reset email with a secure reset link.
      * Link expires after 30 minutes and is single-use.
      */
+    @Async("taskExecutor")
     public void sendPasswordResetEmail(String email, String name, String resetLink) {
         String subject = "Reset Your " + appName + " Password";
         String htmlContent = buildPasswordResetTemplate(name, resetLink);
@@ -103,6 +109,7 @@ public class EmailService {
     /**
      * Sends a 30-minute reminder email for an upcoming session.
      */
+    @Async("taskExecutor")
     public void sendSessionReminderEmail(String name, String email, java.time.LocalDateTime sessionTime) {
         String subject = "Reminder: Upcoming Session in 30 Minutes ⏳";
         String htmlContent = buildSessionReminderTemplate(name, sessionTime);
@@ -115,6 +122,7 @@ public class EmailService {
      * Sends a 6-digit OTP email for email address verification.
      * The plain OTP is shown in the email but never logged.
      */
+    @Async("taskExecutor")
     public void sendOtpVerificationEmail(String name, String email, String otp) {
         String subject = "Verify your " + appName + " account — OTP";
         String htmlContent = buildOtpEmailTemplate(name, otp);
@@ -126,6 +134,7 @@ public class EmailService {
     /**
      * Sends an email to the user when a practitioner cancels a session.
      */
+    @Async("taskExecutor")
     public void sendSessionCancellationEmail(String userName, String userEmail, String practitionerName,
             String reason) {
         String subject = "Important: Therapy Session Cancelled";

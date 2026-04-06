@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { getOrderHistory, getOrderById, cancelOrder, payForOrder } from "../services/orderService";
 import ProductReviewFormModal from "../components/ProductReviewFormModal";
+import UserHeader from "../components/UserHeader";
 
 export default function OrderHistory() {
   const navigate = useNavigate();
@@ -107,6 +108,7 @@ export default function OrderHistory() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
+        <UserHeader />
         {/* Header */}
         <div className="mb-8">
           <button 
@@ -115,8 +117,8 @@ export default function OrderHistory() {
           >
             ← Back to Dashboard
           </button>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Order History</h1>
-          <p className="text-gray-600">View and manage your orders</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Pharmacy History</h1>
+          <p className="text-gray-600">View and manage your previous pharmacy orders and assets</p>
         </div>
 
         {orders.length > 0 ? (

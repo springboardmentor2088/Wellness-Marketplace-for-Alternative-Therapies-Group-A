@@ -15,6 +15,8 @@ public class UserDTO {
     private String address;
     private User.Role role;
     private LocalDateTime createdAt;
+    private boolean blocked;
+    private String blockingReason;
 
     public Integer getId() {
         return id;
@@ -87,4 +89,10 @@ public class UserDTO {
     public void setAddress(String address) {
         this.address = address;
     }
+
+    public boolean isBlocked() { return blocked; }
+    public void setBlocked(boolean blocked) { this.blocked = blocked; }
+
+    public String getBlockingReason() { return blockingReason; }
+    public void setBlockingReason(String blockingReason) { this.blockingReason = blockingReason; }
 }

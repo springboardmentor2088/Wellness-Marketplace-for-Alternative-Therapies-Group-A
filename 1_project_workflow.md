@@ -13,6 +13,7 @@ The Wellness Platform is a **Spring Boot + React** full-stack application that c
 | Backend | Java 17, Spring Boot 3, Spring Security (JWT), Spring Data JPA |
 | Database | MySQL (`wellness_db`) |
 | Frontend | React 18 + Vite, React Router v6, Vanilla CSS |
+| AI / LLM | Google Gemini (1.5 Flash & Lite) |
 | Real-time | WebSocket (Native browser implementation) |
 | Payments | Razorpay Integration (Live Signature Verification) |
 | Email | Spring Mail (Gmail SMTP) |
@@ -41,22 +42,23 @@ wellness-backend (Spring Boot :8081)
 
 | # | Table | Purpose |
 |---|---|---|
-| 1 | `users` | Stores all users (PATIENT, PRACTITIONER, ADMIN roles) with `email_verified` flag |
-| 2 | `email_verification_otp` | 6-digit OTP records for email verification (expires in 5 min, max 5 attempts) |
-| 3 | `password_reset_token` | One-time tokens for forgot-password flow (expires in 30 min) |
+| 1 | `users` | Stores all users (PATIENT, PRACTITIONER, SELLER, AGENT, ADMIN roles) |
+| 2 | `email_verification_otp` | 6-digit OTP records for email verification (expires in 5 min) |
+| 3 | `password_reset_token` | One-time tokens for forgot-password flow |
 | 4 | `practitioner_profile` | Extended profile linked to PRACTITIONER user |
 | 5 | `practitioner_availability` | Weekly schedule slots per practitioner |
 | 6 | `practitioner_request` | Patient-to-practitioner consultation requests |
-| 7 | `therapy_session` | Booked/confirmed/cancelled sessions with `reminder_sent` + `one_hour_reminder_sent` flags |
-| 8 | `notifications` | System-generated in-app notifications (stored by user ID, receiver role) |
+| 7 | `therapy_session` | Booked/confirmed/cancelled sessions |
+| 8 | `notifications` | System-generated in-app notifications |
 | 9 | `product` | Wellness products for marketplace |
 | 10 | `orders` | Customer orders |
 | 11 | `order_item` | Line items within an order |
-| 12 | `review` | Post-session reviews linked to specific therapy sessions |
+| 12 | `review` | Post-session reviews |
 | 13 | `wallet` | Stores user wallet balance |
 | 14 | `wallet_transaction` | Ledger of all wallet credits/debits |
 | 15 | `question` | Q&A from users |
 | 16 | `answer` | Practitioner answers to questions |
+| 17 | `recommendation` | AI-driven personal health recommendations |
 
 ---
 
@@ -93,6 +95,10 @@ wellness-backend (Spring Boot :8081)
 27. Session Review System (Post-therapy feedback for practitioners)
 28. Server-side Cart Persistence (Synchronized cart across sessions/devices)
 29. Enhanced Wallet System (Transaction history and balance management)
+30. AI Medical Intelligence (Symptom Triage, Prescription OCR, Specialist Matching)
+31. Modularized Admin Dashboard (Analytics, Clinical, Security, Shop Modules)
+32. Product Seller & Delivery Agent Onboarding (Role-specific dashboards)
+33. Advanced Security (Blocking system, IP tracking, Role-level session management)
 ```
 
 ---

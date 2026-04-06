@@ -1,6 +1,7 @@
 package com.wellness.backend.service;
 
 import com.wellness.backend.dto.ProductDTO;
+import com.wellness.backend.enums.ProductModerationStatus;
 import com.wellness.backend.model.Product;
 import com.wellness.backend.repository.ProductRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,10 +17,10 @@ public class ProductService {
     @Autowired
     private ProductRepository productRepository;
 
-    // ================= GET ALL PRODUCTS =================
+    // ================= GET ALL ACTIVE PRODUCTS =================
     @Transactional(readOnly = true)
     public List<ProductDTO> getAllProducts() {
-        return productRepository.findAll()
+        return productRepository.findByModerationStatus(ProductModerationStatus.ACTIVE)
                 .stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
@@ -38,6 +39,7 @@ public class ProductService {
     public List<ProductDTO> getProductsByCategory(String category) {
         return productRepository.findByCategory(category)
                 .stream()
+                .filter(p -> p.getModerationStatus() == ProductModerationStatus.ACTIVE)
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
     }
@@ -46,6 +48,16 @@ public class ProductService {
     @Transactional(readOnly = true)
     public List<ProductDTO> searchProducts(String query) {
         return productRepository.searchByName(query)
+                .stream()
+                .filter(p -> p.getModerationStatus() == ProductModerationStatus.ACTIVE)
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    // ================= SEARCH BY GENERIC SYNONYMS =================
+    @Transactional(readOnly = true)
+    public List<ProductDTO> findGenericMatches(List<String> synonyms, String primaryQuery) {
+        return productRepository.findBySynonyms(synonyms, primaryQuery)
                 .stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
@@ -70,6 +82,9 @@ public class ProductService {
         product.setCategory(dto.getCategory());
         product.setStock(dto.getStock());
         product.setImageUrl(dto.getImageUrl());
+        product.setImageUrl2(dto.getImageUrl2());
+        product.setActiveIngredient(dto.getActiveIngredient());
+        product.setModerationStatus(ProductModerationStatus.ACTIVE);
 
         Product saved = productRepository.save(product);
         return mapToDTO(saved);
@@ -87,6 +102,9 @@ public class ProductService {
         if (dto.getCategory() != null) product.setCategory(dto.getCategory());
         if (dto.getStock() != null) product.setStock(dto.getStock());
         if (dto.getImageUrl() != null) product.setImageUrl(dto.getImageUrl());
+        if (dto.getImageUrl2() != null) product.setImageUrl2(dto.getImageUrl2());
+        if (dto.getActiveIngredient() != null) product.setActiveIngredient(dto.getActiveIngredient());
+        product.setModerationStatus(ProductModerationStatus.ACTIVE);
 
         Product updated = productRepository.save(product);
         return mapToDTO(updated);
@@ -112,6 +130,12 @@ public class ProductService {
         dto.setStock(product.getStock());
         dto.setAvailable(product.getStock() > 0);
         dto.setImageUrl(product.getImageUrl());
+        dto.setImageUrl2(product.getImageUrl2());
+        dto.setActiveIngredient(product.getActiveIngredient());
+        dto.setModerationStatus(product.getModerationStatus() != null ? product.getModerationStatus().name() : null);
+        if (product.getSeller() != null) {
+            dto.setSellerId(product.getSeller().getId());
+        }
         return dto;
     }
 }

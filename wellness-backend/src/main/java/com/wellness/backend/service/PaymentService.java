@@ -43,6 +43,9 @@ public class PaymentService {
     @Autowired
     private SessionNotificationService notificationService;
 
+    @Autowired
+    private OrderService orderService;
+
     @Transactional
     public Map<String, String> initiatePayment(Integer sessionId, Integer orderId, Integer userId, BigDecimal amount) throws Exception {
         TherapySession session = null;
@@ -121,8 +124,7 @@ public class PaymentService {
                         session.getId().toString(), ReferenceType.SESSION);
             } else if (transaction.getOrder() != null) {
                 Order order = transaction.getOrder();
-                order.setPaymentStatus(PaymentStatus.PAID);
-                orderRepository.save(order);
+                orderService.markOrderAsPaid(order.getId());
 
                 // Record in wallet ledger for traceability
                 walletService.addTransactionOnly(transaction.getUser(), transaction.getAmount(),
@@ -206,8 +208,7 @@ public class PaymentService {
                     session.getPractitioner().getUser().getName(),
                     java.time.LocalDateTime.of(session.getSessionDate(), session.getStartTime()));
         } else if (order != null) {
-            order.setPaymentStatus(PaymentStatus.PAID);
-            orderRepository.save(order);
+            orderService.markOrderAsPaid(order.getId());
         }
 
         auditLogService.logAction(
